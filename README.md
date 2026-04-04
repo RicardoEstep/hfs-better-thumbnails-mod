@@ -84,7 +84,7 @@ This plugin works as an on-demand generation pipeline:
     *   **Hit**: Serves file immediately (Zero CPU).
     *   **Miss**: Pushes task to **FIFO Queue**.
 4.  **Worker Processing**:
-    *   **Video**: `FFmpeg` seeks into "2s/15%/30%/45%/60% -> Temps Save -> Concats Frame into WEBP -> Deletes Save.
+    *   **Video**: `FFmpeg` seeks into "2s/15%/30%/45%/60% -> Temps Save -> Concats Frame into WEBP -> Deletes Temp Save.
 5.  **Finalize**: Writes to disk cache and streams to client.
 
 ### Dependencies
