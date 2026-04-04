@@ -88,7 +88,6 @@ This plugin works as an on-demand generation pipeline:
 5.  **Finalize**: Writes to disk cache and streams to client.
 
 ### Dependencies
-*   **[Sharp](https://sharp.pixelplumbing.com/)**: High-performance Node.js image processing.
 *   **[FFmpeg](https://ffmpeg.org/)**: The universal multimedia framework.
 
 ---
