@@ -79,7 +79,7 @@ Settings are organized in **Admin Panel > Plugins > better-thumbnails-mod**.
 This plugin works as an on-demand generation pipeline:
 
 1.  **Intercept**: Listens for requests with `?get=thumb`.
-2.  **Hash**: Calculates a BETTER unique SHA256* hash based on `Filename + Timestamp + Dimensions + Quality`.
+2.  **Hash**: Calculates a **BETTER** unique SHA256* hash based on `Filename + Timestamp + Dimensions + Quality`.
 3.  **Cache Lookup**: Checks `storage/thumbnails/[HASH].webp`.
     *   **Hit**: Serves file immediately (Zero CPU).
     *   **Miss**: Pushes task to **FIFO Queue**.
