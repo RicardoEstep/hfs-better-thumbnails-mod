@@ -1,33 +1,28 @@
-# Better Thumbnails Plugin for HFS
+# Better Thumbnails Mod Plugin for HFS
 
-Replace standard browser-based thumbnails with high-performance, server-side generated previews. Supports modern image formats (WebP) and live video frames.
+This is a **"FORK"** of the original PLUGIN.
+
+Replace standard browser-based thumbnails with high-performance, server-side generated **animated** previews. Supports modern image formats (WebP) and live video frames.
 
 ## 🌟 Capabilities
 
 This plugin solves the "loading lag" caused by generating thumbnails in the browser, especially for video files.
 
 *   **⚡ Zero-Lag Frontend**: Generates **static images** on the server. Your browser downloads tiny WebP images instead of decoding massive video files.
-*   **🎥 Video Frame Extraction**: Uses **FFmpeg** to extract a representative frame from valid video files (seeking past the intro black screen).
-*   **🖼️ Smart Resizing**: Uses **Sharp** to create high-quality, aspect-ratio-preserved thumbnails that fit perfectly within your grid.
-*   **🕸️ WebP Format**: Serves next-gen **WebP** images for ~30% smaller file sizes compared to JPEGs, saving bandwidth.
+*   **🎥 Video Frame Extraction**: Uses **FFmpeg** to extract "5 segments of 1 second" from valid video files (seeking past the intro black screen).
+*   **🕸️ WebP Format**: Serves next-gen **WebP** images for better quality and file sizes compared to "GIF", saving bandwidth.
 *   **🔒 Concurrency Control**: Built-in **Task Queue** limits the number of parallel FFmpeg processes to prevent server CPU overload (Configurable).
-*   **💾 File-Based Caching**: Persists generated thumbnails to `~/.hfs/plugins/better-thumbnails/storage`, keeping the main database clean and improving load speeds.
+*   **💾 File-Based Caching**: Persists now correctly, generated thumbnails to `~/.hfs/plugins/better-thumbnails/storage`, keeping the main database clean and improving load speeds.
 *   **🛠️ Extended Support**: Native frame extraction for `mp4`, `mkv`, `avi`, `mov`, `wmv`, `flv`, `webm`, `ts`, and `m4v`.
 
 ---
 
 ## 🚀 Installation
 
-### Option 1: Automatic (Recommended)
-1.  Go to your **HFS Admin Panel**.
-2.  Navigate to **Plugins** -> **Search online**.
-3.  Search for **`better-thumbnails`**.
-4.  Click **Install**.
-
-### Option 2: Manual
+### Option 1: Manual
 1.  Download the `dist` folder from this repository.
 2.  Place it inside your HFS `plugins` directory
-3.  Rename `dist` folder to `better-thumbnails`
+3.  Rename `dist` folder to `better-thumbnails-mod`
 4.  Restart HFS or reload plugins.
 
 ---
@@ -44,7 +39,7 @@ Get the most out of the plugin in 30 seconds:
 
 ## ⚙️ Configuration Guide
 
-Settings are organized in **Admin Panel > Plugins > better-thumbnails**.
+Settings are organized in **Admin Panel > Plugins > better-thumbnails-mod**.
 
 ### 1. General & Image
 | Setting | Description | Default |
@@ -66,7 +61,7 @@ Settings are organized in **Admin Panel > Plugins > better-thumbnails**.
 ### 1. Generation Issues
 | Error/Event | Description | Solution(s) |
 | :--- | :--- | :--- |
-| **Thumbnails not showing** | General failure to load image. | 1. Check **FFmpeg Path**.<br>2. Clear browser cache.<br>3. Check `plugins/better-thumbnails/storage` permissions. |
+| **Thumbnails not showing** | General failure to load image. | 1. Check **FFmpeg Path**.<br>2. Clear browser cache.<br>3. Check `plugins/better-thumbnails-mod/storage` permissions. |
 | **"Server Error" (500)** | Backend crash during generation. | Enable **Log Generation** to see the error. Usually a corrupt video file. |
 | **Large Images Fail** | "Image too large (>100MB)" error. | Plugin strictly rejects source images >100MB to prevent RAM exhaustion. |
 
@@ -84,14 +79,12 @@ Settings are organized in **Admin Panel > Plugins > better-thumbnails**.
 This plugin works as an on-demand generation pipeline:
 
 1.  **Intercept**: Listens for requests with `?get=thumb`.
-2.  **Hash**: Calculates a unique MD5 hash based on `Filename + Timestamp + Dimensions + Quality`.
+2.  **Hash**: Calculates a BETTER unique SHA256* hash based on `Filename + Timestamp + Dimensions + Quality`.
 3.  **Cache Lookup**: Checks `storage/thumbnails/[HASH].webp`.
     *   **Hit**: Serves file immediately (Zero CPU).
     *   **Miss**: Pushes task to **FIFO Queue**.
 4.  **Worker Processing**:
-    *   **Video**: `FFmpeg` seeks to 1s -> Extracts Frame -> Pipes to `Sharp`.
-    *   **Image**: Pipes Source -> `Sharp`.
-    *   **Sharp**: Resize -> Rotate (EXIF) -> Convert to WebP.
+    *   **Video**: `FFmpeg` seeks into "2s/15%/30%/45%/60% -> Temps Save -> Concats Frame into WEBP -> Deletes Save.
 5.  **Finalize**: Writes to disk cache and streams to client.
 
 ### Dependencies
@@ -103,3 +96,4 @@ This plugin works as an on-demand generation pipeline:
 ## 🏆 Credits
 
 *   **[hfs-thumbnails](https://github.com/rejetto/thumbnails)**: Thanks to @rejetto for the original code of hfs-thumbnails this plugin is improved upon.
+*   **[VenB304/hfs-better-thumbnails](https://github.com/VenB304/hfs-better-thumbnails)**: Thanks for the original work.
