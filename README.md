@@ -8,7 +8,7 @@ Replace standard browser-based thumbnails with high-performance, server-side gen
 
 This plugin solves the "loading lag" caused by generating thumbnails in the browser, especially for video files.
 
-*   **⚡ Zero-Lag Frontend**: Generates **static images** on the server. Your browser downloads tiny WebP images instead of decoding massive video files.
+*   **⚡ Zero-Lag Frontend**: Generates **animated images** on the server. Your browser downloads tiny WebP images instead of decoding massive video files.
 *   **🎥 Video Frame Extraction**: Uses **FFmpeg** to extract "5 segments of 1 second" from valid video files (seeking past the intro black screen).
 *   **🕸️ WebP Format**: Serves next-gen **WebP** images for better quality and file sizes compared to "GIF", saving bandwidth.
 *   **🔒 Concurrency Control**: Built-in **Task Queue** limits the number of parallel FFmpeg processes to prevent server CPU overload (Configurable).
