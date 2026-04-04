@@ -2,6 +2,8 @@
 
 This is a **"FORK"** of the original PLUGIN, and changes were made **with an AI Agent**.
 
+- AFTER SOME TESTING, IT HAS STILL BUGS. Actually, the "?get=thumb" petition make every "webp" static. I'm investigating this.
+
 Replace standard browser-based thumbnails with high-performance, server-side generated **animated** previews. Supports modern image formats (WebP) and live video frames.
 It repairs too the "cache-storage" using **SHA256**.
 
