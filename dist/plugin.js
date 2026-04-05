@@ -4,7 +4,7 @@
  * Credits:
  * - Based on 'thumbnails' plugin by Rejetto (https://github.com/rejetto/thumbnails)
  * - FFmpeg integration inspired by 'videojs-player' and 'unsupported-videos'
- * - VenB304 for it's first version.
+ * - "VenB304" for it's first original version.
  */
 
 exports.version = 1;
