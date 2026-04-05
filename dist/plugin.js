@@ -10,7 +10,7 @@
 exports.version = 1;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates animated images preventing frontend lag.";
 exports.apiRequired = 12.0; // Access to api.misc
-exports.repo = "RicardoEstep/hfs-better-thumbnails-mod";
+exports.repo = "hfs-other-plugins/better-thumbnails-mod";
 exports.frontend_js = 'main.js';
 
 exports.config = {
