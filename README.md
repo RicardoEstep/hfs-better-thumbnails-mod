@@ -2,10 +2,10 @@
 
 This is a **"FORK"** of the original PLUGIN, and changes were made **with an AI Agent**.
 
-- AFTER SOME TESTING, IT HAS STILL BUGS. Actually, the "?get=thumb" petition make every "webp" static. I'm investigating this.
+- PLEASE DON'T USE IT WITH THE ORIGINAL "Thumbnails" PLUGIN ENABLED. It will do the same function, and will make every "animated webp" static.
 
 Replace standard browser-based thumbnails with high-performance, server-side generated **animated** previews. Supports modern image formats (WebP) and live video frames.
-It repairs too the "cache-storage" using **SHA256**.
+It repairs too the "cache-storage" using **SHA256**, and now, it made thumbnails of GIF images too.
 
 ## 🌟 Capabilities
 
