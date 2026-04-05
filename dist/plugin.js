@@ -7,7 +7,7 @@
  * - "VenB304" for it's first original version.
  */
 
-exports.version = 1;
+exports.version = 2;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates animated images preventing frontend lag.";
 exports.apiRequired = 12.0; // Access to api.misc
 exports.repo = "hfs-other-plugins/better-thumbnails-mod";
@@ -157,8 +157,14 @@ exports.init = async api => {
                             ctx.set(header, 'ffmpeg-animated');
                             // BYPASS SHARP: FFmpeg outputs the final Animated WebP buffer directly
                             return await generateAnimatedVideoThumbnail(fileSource, w, quality);
-                        } 
+                        }
                         
+						// WorkAround for GIFs - use FFmpeg to preserve animation
+						if (ext === 'gif') {
+							ctx.set(header, 'ffmpeg-gif-animated');
+							return await generateAnimatedGifThumbnail(fileSource, w, quality);
+						}
+						
                         // IMAGE GENERATION (Fallback to Sharp)
                         if (size > 100 * 1024 * 1024) throw new Error("Image too large (>100MB)");
                         const sourceBuffer = await buffer(ctx.body);
@@ -284,6 +290,46 @@ exports.init = async api => {
             });
         });
     }
+	
+	async function generateAnimatedGifThumbnail(filePath, width, quality) {
+		const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
+		const os = require('os');
+		const tmpFile = path.join(os.tmpdir(), `ffmpeg-gif-${Date.now()}-${Math.random().toString(36).slice(2)}.webp`);
+
+		return new Promise((resolve, reject) => {
+			const args = [
+				'-i', filePath,
+				'-vf', `fps=10,scale='min(${width}\\,iw)':-2`,
+				'-c:v', 'libwebp',
+				'-loop', '0',
+				'-q:v', quality.toString(),
+				'-y',
+				tmpFile
+			];
+
+			const proc = spawn(ffmpegPath, args);
+			const stderrChunks = [];
+
+			proc.stderr.on('data', chunk => stderrChunks.push(chunk));
+			proc.on('error', err => reject(err));
+			proc.on('exit', async (code) => {
+				if (code !== 0) {
+					const stderr = Buffer.concat(stderrChunks).toString();
+					fs.unlink(tmpFile).catch(() => {});
+					return reject(new Error(`FFmpeg GIF conversion failed (${code}): ${stderr}`));
+				}
+
+				try {
+					const fullBuffer = await fs.readFile(tmpFile);
+					await fs.unlink(tmpFile).catch(() => {});
+					if (fullBuffer.length === 0) return reject(new Error("FFmpeg produced empty WebP"));
+					resolve(fullBuffer);
+				} catch (err) {
+					reject(new Error(`Failed to read WebP: ${err.message}`));
+				}
+			});
+		});
+	}
 
     // Helper to get duration via ffprobe
     function getVideoDuration(filePath, ffprobePath) {
