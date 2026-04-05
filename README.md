@@ -15,7 +15,7 @@ This plugin solves the "loading lag" caused by generating thumbnails in the brow
 *   **🎥 Video Frame Extraction**: Uses **FFmpeg** to extract "5 segments of 1 second" from valid video files (seeking past the intro black screen).
 *   **🕸️ WebP Format**: Serves next-gen **WebP** images for better quality and file sizes compared to "GIF", saving bandwidth.
 *   **🔒 Concurrency Control**: Built-in **Task Queue** limits the number of parallel FFmpeg processes to prevent server CPU overload (Configurable).
-*   **💾 File-Based Caching**: Persists now correctly, generated thumbnails to `~/.hfs/plugins/better-thumbnails/storage`, keeping the main database clean and improving load speeds.
+*   **💾 File-Based Caching**: Persists now correctly, generated thumbnails to `~/.hfs/plugins/better-thumbnails-mod/storage`, keeping the main database clean and improving load speeds.
 *   **🛠️ Extended Support**: Native frame extraction for `mp4`, `mkv`, `avi`, `mov`, `wmv`, `flv`, `webm`, `ts`, and `m4v`.
 
 ---
