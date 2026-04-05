@@ -6,7 +6,7 @@ This is a **"FORK"** of the original PLUGIN, and changes were made **with an AI 
 - It **needs** "Sharp" plugin too.
 
 Replace standard browser-based thumbnails with high-performance, server-side generated **animated** previews. Supports modern image formats (WebP) and live video frames.
-It repairs too the "cache-storage" using **SHA256**, and now, it made thumbnails of GIF images too.
+It repairs too the "cache-storage" using **SHA256**, and now, it make thumbnails of GIF images too.
 
 ## 🌟 Capabilities
 
