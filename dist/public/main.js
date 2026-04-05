@@ -3,7 +3,7 @@
  * 
  * Credits:
  * - Based on 'thumbnails' frontend by Rejetto (https://github.com/rejetto/thumbnails)
- * - VenB304 for it's first version.
+ * - "VenB304" for it's first original version.
  */
 'use strict'; {
     const { h, t } = HFS;
