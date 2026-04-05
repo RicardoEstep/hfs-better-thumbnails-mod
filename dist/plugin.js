@@ -7,7 +7,7 @@
  * - "VenB304" for it's first original version.
  */
 
-exports.version = 2;
+exports.version = 3;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates animated images preventing frontend lag.";
 exports.apiRequired = 12.0; // Access to api.misc
 exports.repo = "hfs-other-plugins/better-thumbnails-mod";
@@ -159,9 +159,9 @@ exports.init = async api => {
                             return await generateAnimatedVideoThumbnail(fileSource, w, quality);
                         }
                         
-						// WorkAround for GIFs - use FFmpeg to preserve animation
-						if (ext === 'gif') {
-							ctx.set(header, 'ffmpeg-gif-animated');
+						// WorkAround for ALL animated formats - use FFmpeg to preserve animation
+						if (['gif', 'webp'].includes(ext)) {
+							ctx.set(header, 'ffmpeg-gif-to-webp');
 							return await generateAnimatedGifThumbnail(fileSource, w, quality);
 						}
 						
