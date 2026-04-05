@@ -1,8 +1,9 @@
 /**
- * Better Thumbnails Frontend
+ * Better Thumbnails Mod Frontend
  * 
  * Credits:
  * - Based on 'thumbnails' frontend by Rejetto (https://github.com/rejetto/thumbnails)
+ * - VenB304 for it's first version.
  */
 'use strict'; {
     const { h, t } = HFS;
