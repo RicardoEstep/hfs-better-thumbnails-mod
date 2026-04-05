@@ -3,6 +3,7 @@
 This is a **"FORK"** of the original PLUGIN, and changes were made **with an AI Agent**.
 
 - PLEASE, **DON'T USE IT WITH THE ORIGINAL "Thumbnails" PLUGIN ENABLED!** It will do the same function, and will make every "animated webp" static.
+- But, **will need** "Sharp" plugin.
 
 Replace standard browser-based thumbnails with high-performance, server-side generated **animated** previews. Supports modern image formats (WebP) and live video frames.
 It repairs too the "cache-storage" using **SHA256**, and now, it made thumbnails of GIF images too.
@@ -91,6 +92,7 @@ This plugin works as an on-demand generation pipeline:
 5.  **Finalize**: Writes to disk cache and streams to client.
 
 ### Dependencies
+*   **[Sharp](https://sharp.pixelplumbing.com/)**: High-performance Node.js image processing.
 *   **[FFmpeg](https://ffmpeg.org/)**: The universal multimedia framework.
 
 ---
