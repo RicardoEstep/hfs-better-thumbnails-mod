@@ -2,8 +2,8 @@
 
 This is a **"FORK"** of the original PLUGIN, and changes were made **with an AI Agent**.
 
-- PLEASE, **DON'T USE IT WITH THE ORIGINAL "Thumbnails" PLUGIN ENABLED!** It will do the same function, and will make every "animated webp" static.
-- But, **will need** "Sharp" plugin.
+- PLEASE, **DON'T USE IT WITH THE ORIGINAL "Thumbnails" PLUGIN ENABLED!** It's already made to work same as the original plugin. Having it enabled will make every "animated webp" **static**. 🥲
+- It **needs** "Sharp" plugin too.
 
 Replace standard browser-based thumbnails with high-performance, server-side generated **animated** previews. Supports modern image formats (WebP) and live video frames.
 It repairs too the "cache-storage" using **SHA256**, and now, it made thumbnails of GIF images too.
