@@ -154,10 +154,8 @@ exports.init = async api => {
                                 const streamIndex = await getAttachedPictureStreamIndex(fileSource, ffprobePath);
                                 
                                 if (streamIndex !== null) {
-                                    console.log(`🎵 Found embedded picture at stream ${streamIndex}`);
                                     ctx.set(header, 'ffmpeg-extracted-cover');
                                     const coverBuffer = await extractEmbeddedThumbnail(fileSource, streamIndex, ffmpegPath);
-                                    console.log(`✅ Extracted ${coverBuffer.length} bytes`);
                                     
                                     // Convert to WebP using FFmpeg directly
                                     const finalBuffer = await convertImageToWebP(coverBuffer, w, h, quality);
