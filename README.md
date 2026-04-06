@@ -1,6 +1,6 @@
 # Better Thumbnails Mod Plugin for HFS
 
-This is a **"FORK"** of the original PLUGIN, and changes were made **with an AI Agent**.
+This is a **"FORK"** of the original PLUGIN, and very some of the changes were made **with an AI Agent**.
 
 - PLEASE, **DON'T USE IT WITH THE ORIGINAL "Thumbnails" PLUGIN ENABLED!** It's already made to work same as the original plugin. Having it enabled will make every "animated webp" **static**. 🥲
 - It's main funtionality is supposed to **bypass** "Sharp" plugin too, so it's **not** necesary.
