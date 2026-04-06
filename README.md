@@ -54,7 +54,7 @@ Settings are organized in **Admin Panel > Plugins > better-thumbnails-mod**.
 ### 2. Performance & System
 | Setting | Description | Default |
 | :--- | :--- | :--- |
-| **Max Concurrent Generations** | Limit parallel FFmpeg/Sharp processes. Prevents CPU spikes during folder scans. | `4` |
+| **Max Concurrent Generations** | Limit parallel FFmpeg processes. Prevents CPU spikes during folder scans. | `4` |
 | **FFmpeg Executable Path** | **Required**. Absolute path to `ffmpeg` binary. | *Empty* |
 | **Log Generation** | Print console messages for every generated thumbnail. Useful for debugging. | `Off` |
 
@@ -88,8 +88,9 @@ This plugin works as an on-demand generation pipeline:
     *   **Hit**: Serves file immediately (Zero CPU).
     *   **Miss**: Pushes task to **FIFO Queue**.
 4.  **Worker Processing**:
+    *   **Audio**: `FFmpeg` extracts cover -> Reduces Frame into WEBP.
     *   **Video**: `FFmpeg` seeks into "2s/15%/30%/45%/60% -> Temps Save -> Concats Frame into WEBP -> Deletes Temp Save.
-5.  **Finalize**: Writes to disk cache and streams to client.
+6.  **Finalize**: Writes to disk cache and streams to client.
 
 ### Dependencies
 *   **[FFmpeg](https://ffmpeg.org/)**: The universal multimedia framework.
