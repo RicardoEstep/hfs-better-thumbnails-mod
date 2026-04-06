@@ -85,6 +85,7 @@ exports.init = async api => {
     });
 
     const isVideo = (ext) => VIDEO_EXTS.includes(ext);
+	const isAudio = (ext) => AUDIO_EXTS.includes(ext);
 
     return {
         middleware(ctx) {
