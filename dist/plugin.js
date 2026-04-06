@@ -7,7 +7,7 @@
  * - "VenB304" for it's first original version.
  */
 
-exports.version = 5;
+exports.version = 6;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates animated images preventing frontend lag.";
 exports.apiRequired = 12.0;
 exports.repo = "RicardoEstep/hfs-better-thumbnails-mod";
