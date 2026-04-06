@@ -12,6 +12,7 @@
     // List of video extensions we support via FFmpeg
     // We treat them exactly like images now, because the server does the heavy lifting.
     const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v'];
+	const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus'];
 
     const isSupported = (entry) => {
         if (!entry) return false;
@@ -20,7 +21,8 @@
         // Server-side calculated support flag or Standard Image Exts or Video Exts
         return entry._th
             || ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'avif', 'svg'].includes(ext)
-            || VIDEO_EXTS.includes(ext);
+            || VIDEO_EXTS.includes(ext)
+			|| AUDIO_EXTS.includes(ext);
     };
 
     // Component to properly handle hooks
@@ -36,9 +38,10 @@
         // For IMAGES, Instant-Show waits for 'img.thumbnail'. When we execute, it finds us
         // and binds correctly. If we reset bind here, it would double-bind (rendering bug).
         const isVideo = VIDEO_EXTS.includes(entry.ext.toLowerCase());
+		const isAudio = AUDIO_EXTS.includes(entry.ext.toLowerCase());
 
         HFS.React.useEffect(() => {
-            if (isVideo && domRef.current) {
+            if ((isVideo || isAudio) && domRef.current) {
                 const li = domRef.current.closest('li.file');
                 if (li && li.dataset.bound) {
                     // Reset the bind flag so Instant-Show finds the NEW icon
