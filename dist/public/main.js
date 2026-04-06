@@ -12,7 +12,7 @@
     // List of video extensions we support via FFmpeg
     // We treat them exactly like images now, because the server does the heavy lifting.
     const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v'];
-	const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus'];
+	const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
 
     const isSupported = (entry) => {
         if (!entry) return false;
