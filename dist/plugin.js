@@ -56,7 +56,7 @@ exports.init = async api => {
 
     const header = 'x-thumbnail';
     const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v'];
-    const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus'];
+    const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
     const MEDIA_WITH_COVERS = [...VIDEO_EXTS, ...AUDIO_EXTS];
 
     const cacheDir = path.join(api.storageDir, 'thumbnails');
