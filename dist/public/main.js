@@ -30,8 +30,8 @@
         // Use ref to reset 'Instant-Show' binding
         const domRef = HFS.React.useRef(null);
 
-        // Check if this is a video.
-        // For videos, Instant-Show binds to the DEFAULT 'span.icon' immediately.
+        // Check if this is a video or audio.
+        // For videos or audio, Instant-Show binds to the DEFAULT 'span.icon' immediately.
         // When we mount and replace it with OUR 'span.icon', the listener is lost (zombie).
         // We must force Instant-Show to find us.
         //
