@@ -12,8 +12,8 @@ The "cache-storage" is repaired and uses **SHA256**. It make animated thumbnails
 
 This plugin solves the "loading lag" caused by generating thumbnails in the browser, especially for video files.
 
-*   **⚡ Zero-Lag Frontend**: Generates **animated images** on the server. Your browser downloads tiny WebP images instead of decoding massive video files.
-*   **🎥 Video Frame Extraction**: Uses **FFmpeg** to extract "5 segments of 1 second" from valid video files (seeking past the intro black screen).
+*   **⚡ Zero-Lag Frontend**: Generates **animated images** of videos on the server. Your browser downloads tiny WebP images instead of decoding massive video files.
+*   **🎥 Video Frame Extraction**: Uses **FFmpeg** to extract "some segments" from valid video files and shows a nice animated thumbnail.
 *   **🕸️ WebP Format**: Serves next-gen **WebP** images for better quality and file sizes compared to "GIF", saving bandwidth.
 *   **🔒 Concurrency Control**: Built-in **Task Queue** limits the number of parallel FFmpeg processes to prevent server CPU overload (Configurable).
 *   **💾 File-Based Caching**: Persists now correctly, generated thumbnails to `~/.hfs/plugins/better-thumbnails-mod/storage`, keeping the main database clean and improving load speeds.
@@ -35,9 +35,10 @@ This plugin solves the "loading lag" caused by generating thumbnails in the brow
 
 Get the most out of the plugin in 30 seconds:
 
-1.  **Install FFmpeg**: Ensure [FFmpeg](https://ffmpeg.org/download.html) is installed on your system.
+1.  **Install FFmpeg**: Ensure [FFmpeg](https://ffmpeg.org/download.html) is installed on your system. It **needs "ffprobe"** so unzip the full package!
 2.  **Link Path**: In **Admin Panel > Plugins > better-thumbnails**, set the **FFmpeg Executable Path** to the location of your `ffmpeg.exe` (e.g. `C:\ffmpeg\bin\ffmpeg.exe`).
 3.  **Optimize Performance**: If you have a powerful server, increase **Max Concurrent Generations** to `8` for faster bulk generation. On weaker VPS/Pi, keep it at `2-4`.
+4. **Animated Generation can be CPU intensive!** Care of this!
 
 ---
 
@@ -54,7 +55,7 @@ Settings are organized in **Admin Panel > Plugins > better-thumbnails-mod**.
 ### 2. Performance & System
 | Setting | Description | Default |
 | :--- | :--- | :--- |
-| **Max Concurrent Generations** | Limit parallel FFmpeg processes. Prevents CPU spikes during folder scans. | `4` |
+| **Max Concurrent Generations** | Limit parallel FFmpeg processes. Prevents CPU spikes during folder scans. | `2` |
 | **FFmpeg Executable Path** | **Required**. Absolute path to `ffmpeg` binary. | *Empty* |
 | **Log Generation** | Print console messages for every generated thumbnail. Useful for debugging. | `Off` |
 
@@ -89,7 +90,7 @@ This plugin works as an on-demand generation pipeline:
     *   **Miss**: Pushes task to **FIFO Queue**.
 4.  **Worker Processing**:
     *   **Audio**: `FFmpeg` extracts cover -> Reduces Frame into WEBP.
-    *   **Video**: `FFmpeg` seeks into "2s/15%/30%/45%/60% -> Temps Save -> Concats Frame into WEBP -> Deletes Temp Save.
+    *   **Video**: `FFmpeg` extracts a 5 seconds intro + 2 seconds of scenes from the 20%, and 40% into a Temp Save -> Concats Frames into an animated WEBP -> Deletes Temps
 6.  **Finalize**: Writes to disk cache and streams to client.
 
 ### Dependencies
