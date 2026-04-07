@@ -18,7 +18,7 @@
         if (!entry) return false;
         const ext = entry.ext.toLowerCase();
 
-        // Server-side calculated support flag or Standard Image Exts or Video Exts
+        // Server-side calculated support flag or Standard Image Exts, Video Exts or Audio Exts.
         return entry._th
             || ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'avif', 'svg'].includes(ext)
             || VIDEO_EXTS.includes(ext)
