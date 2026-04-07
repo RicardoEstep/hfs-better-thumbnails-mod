@@ -31,7 +31,7 @@ exports.config = {
     },
     concurrency_limit: {
         type: 'number',
-        defaultValue: 4,
+        defaultValue: 2,
         min: 1, max: 32,
         label: "Max Concurrent Generations",
         helperText: "Maximum number of parallel thumbnails to generate. Higher = more CPU usage.",
