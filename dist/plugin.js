@@ -1,5 +1,5 @@
 /**
- * Better Thumbnails Modded Plugin
+ * Better Thumbnails Mod Plugin
  * 
  * Credits:
  * - Based on 'thumbnails' plugin by Rejetto (https://github.com/rejetto/thumbnails)
@@ -7,8 +7,8 @@
  * - "VenB304" for it's first original version.
  */
 
-exports.version = 6;
-exports.description = "High-performance thumbnails generation using FFmpeg. Generates animated images preventing frontend lag.";
+exports.version = 7;
+exports.description = "High-performance thumbnails generation using FFmpeg. Generates images on server preventing frontend lag.";
 exports.apiRequired = 12.0;
 exports.repo = "RicardoEstep/hfs-better-thumbnails-mod";
 exports.frontend_js = 'main.js';
@@ -50,7 +50,7 @@ exports.config = {
 exports.init = async api => {
     const { createReadStream, createWriteStream, promises: fs } = api.require('fs');
     const path = api.require('path');
-    const crypto = api.require('crypto');
+    const crypto = api.require('crypto'); // For SHA256 hashing.
     const { buffer } = api.require('node:stream/consumers');
     const { spawn } = api.require('child_process');
 
@@ -59,9 +59,11 @@ exports.init = async api => {
     const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
     const MEDIA_WITH_COVERS = [...VIDEO_EXTS, ...AUDIO_EXTS];
 
+	// Setup Cache Directory
     const cacheDir = path.join(api.storageDir, 'thumbnails');
     await fs.mkdir(cacheDir, { recursive: true }).catch(err => console.error("BetterThumbnails: Failed to create cache dir", err));
 
+	// Concurrency Queue
     const queue = [];
     let active = 0;
     const inFlightRequests = new Map();
@@ -83,10 +85,11 @@ exports.init = async api => {
         queue.push({ task, resolve, reject });
         runQueue();
     });
-
+	
     const isVideo = (ext) => VIDEO_EXTS.includes(ext);
 	const isAudio = (ext) => AUDIO_EXTS.includes(ext);
 
+	// Plugin Function.
     return {
         middleware(ctx) {
             if (ctx.query.get !== 'thumb') return;
@@ -111,6 +114,7 @@ exports.init = async api => {
                 const w = Number(ctx.query.w) || pixels;
                 const h = Number(ctx.query.h) || w;
 
+				// Calculate Cache Key
                 const safeSize = size ? size.toString() : '0';
                 const safeTs = fileTs ? Math.floor(fileTs).toString() : '0';
                 const cacheKeyStr = `${fileSource}|${safeSize}|${safeTs}|${w}|${h}|${quality}`;
@@ -128,7 +132,7 @@ exports.init = async api => {
                     }
                 } catch (e) { /* Missing cache is normal */ }
 
-                // Check In-Flight Requests (Memory Deduplication)
+                // Fallback: Check In-Flight Requests (Memory Deduplication)
                 if (inFlightRequests.has(cacheHash)) {
                     try {
                         const outputBuffer = await inFlightRequests.get(cacheHash);
@@ -141,9 +145,10 @@ exports.init = async api => {
                     }
                 }
 
+				// Generate (Queued)
                 const ext = path.extname(fileSource).replace('.', '').toLowerCase();
 
-                // Create the generation task
+                // Create the "Generation Task".
                 const generationTask = (async () => {
                     const outputBuffer = await enqueue(async () => {
                         const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
@@ -169,13 +174,13 @@ exports.init = async api => {
                             }
                         }
 						
-						// 2. If Audio don't have cover.
+						// 2. If Audio Files don't have any Cover.
 						if (AUDIO_EXTS.includes(ext)) {
-							ctx.status = 204; // No content (no thumbnail)
+							ctx.status = 204; // No content.
 							return null;
 						}
 
-                        // 3. Fallback: Generate Animated Video Thumbnail
+                        // 3. Generate Animated Video Thumbnail.
                         if (isVideo(ext)) {
                             ctx.set(header, 'ffmpeg-animated');
                             const buf = await generateAnimatedVideoThumbnail(fileSource, w, quality);
@@ -183,7 +188,7 @@ exports.init = async api => {
                             return buf;
                         }
 
-                        // 4. Animated GIF/WebP
+                        // 4. Animated GIF/WebP.
                         if (['gif', 'webp'].includes(ext)) {
                             ctx.set(header, 'ffmpeg-gif-to-webp');
                             const buf = await generateAnimatedGifThumbnail(fileSource, w, quality);
@@ -191,7 +196,7 @@ exports.init = async api => {
                             return buf;
                         }
 
-                        // 5. Standard Image
+                        // 5. Standard Images.
                         if (size > 100 * 1024 * 1024) throw new Error("Image too large (>100MB)");
 
                         let sourceBuffer;
@@ -210,7 +215,8 @@ exports.init = async api => {
                         await fs.writeFile(cacheFile, finalBuffer);
                         return finalBuffer;
                     });
-
+					
+					// Serve.
                     return outputBuffer;
                 })();
 
@@ -221,7 +227,7 @@ exports.init = async api => {
                     ctx.type = 'image/webp';
                     ctx.body = outputBuffer;
                 } catch (e) {
-                    console.error(`BetterThumbnails Error [${fileSource}]:`, e.message);
+                    console.error(`BetterThumbnailsMod Error [${fileSource}]:`, e.message);
                     ctx.status = 500;
                     ctx.body = e.message;
                 } finally {
@@ -230,7 +236,7 @@ exports.init = async api => {
             };
         }
     };
-
+	
     function convertImageToWebP(imageBuffer, width, height, quality) {
         return new Promise((resolve, reject) => {
             const os = require('os');
@@ -238,7 +244,7 @@ exports.init = async api => {
             const tmpInput = path.join(os.tmpdir(), `input-${Date.now()}-${Math.random().toString(36).slice(2)}`);
             const tmpOutput = path.join(os.tmpdir(), `output-${Date.now()}-${Math.random().toString(36).slice(2)}.webp`);
 
-            // Write input buffer to temp file
+            // Write "input buffer" to "temp file".
             fs.writeFile(tmpInput, imageBuffer).then(() => {
                 const args = [
                     '-i', tmpInput,
@@ -282,7 +288,7 @@ exports.init = async api => {
             }).catch(err => reject(new Error(`Failed to write temp input: ${err.message}`)));
         });
     }
-
+		
     async function generateAnimatedVideoThumbnail(filePath, width, quality) {
         const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
         const ffprobePath = getFFprobePath(ffmpegPath);
@@ -291,15 +297,20 @@ exports.init = async api => {
         const duration = await getVideoDuration(filePath, ffprobePath);
 
         let segments = [];
-        if (duration < 5) {
-            segments = [{ start: 0, duration: Math.max(1, duration) }];
-        } else {
+		if (duration < 6) {
+			// Videos less than 6 seconds - Make a full thumbnail.
+			segments = [{ start: 0, duration: duration }];
+        }
+		else if (duration < 30) {
+			// Videos less than 30 seconds - First 5 seconds only.
+            segments = [{ start: 0, duration: 5 }];
+        }
+        else {
+			// Every other video - First 4 seconds + 4 More with some Segments.
             segments = [
-                { start: Math.min(2, duration - 1), duration: 1 },
-                { start: duration * 0.15, duration: 1 },
-                { start: duration * 0.30, duration: 1 },
-                { start: duration * 0.45, duration: 1 },
-                { start: duration * 0.60, duration: 1 }
+                { start: 0, duration: 4 },
+                { start: duration * 0.20, duration: 2 },
+                { start: duration * 0.40, duration: 2 },
             ];
         }
 
