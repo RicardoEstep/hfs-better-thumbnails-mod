@@ -310,7 +310,7 @@ exports.init = async api => {
             segments = [
                 { start: 0, duration: 4 },
                 { start: duration * 0.20, duration: 2 },
-                { start: duration * 0.40, duration: 2 },
+                { start: duration * 0.40, duration: 2 }
             ];
         }
 
