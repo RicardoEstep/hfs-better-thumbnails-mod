@@ -1,4 +1,4 @@
-# Better Thumbnails Mod Plugin for HFS
+# Better Thumbnails Mod Plugin for HFS - V8
 
 This is a **"FORK"** of the original PLUGIN, and very some of the changes were made **with an AI Agent**.
 
@@ -6,7 +6,7 @@ This is a **"FORK"** of the original PLUGIN, and very some of the changes were m
 - It's main funtionality is supposed to **bypass** "Sharp" plugin too, so it's **not** necesary.
 
 Replace standard browser-based thumbnails with high-performance, server-side generated **static** and **animated** "webp" previews.
-The "cache-storage" is repaired and uses **SHA256**. It make animated thumbnails of GIF/WEBP images. And now, it extracts "covers" from music files too!
+The "cache-storage" is repaired and uses **SHA256**. It make animated thumbnails of GIF/WEBP images. And now, it extracts "covers" from music files, and every type of document files too!
 
 ## 🌟 Capabilities
 
@@ -17,7 +17,7 @@ This plugin solves the "loading lag" caused by generating thumbnails in the brow
 *   **🕸️ WebP Format**: Serves next-gen **WebP** images for better quality and file sizes compared to "GIF", saving bandwidth.
 *   **🔒 Concurrency Control**: Built-in **Task Queue** limits the number of parallel FFmpeg processes to prevent server CPU overload (Configurable).
 *   **💾 File-Based Caching**: Persists now correctly, generated thumbnails to `~/.hfs/plugins/better-thumbnails-mod/storage`, keeping the main database clean and improving load speeds.
-*   **🛠️ Extended Support**: Native frame extraction for `mp4`, `mkv`, `avi`, `mov`, `wmv`, `flv`, `webm`, `ts`, `m4v`, `mp3`, `aac`, `flac`, `m4a`, `ogg`, `wav`, `opus`, `oga`, `wma`.
+*   **🛠️ Extended Support**: Native frame extraction for `mp4`, `mkv`, `avi`, `mov`, `wmv`, `flv`, `webm`, `ts`, `m4v`, `mp3`, `aac`, `flac`, `m4a`, `ogg`, `wav`, `opus`, `oga`, `wma`, `pdf`, `doc`, `docx`, `ppt`, `pptx`, `xls`, `xlsx`, `odt`, `ods`, `odp`.
 
 ---
 
@@ -35,10 +35,13 @@ This plugin solves the "loading lag" caused by generating thumbnails in the brow
 
 Get the most out of the plugin in 30 seconds:
 
-1.  **Install FFmpeg**: Ensure [FFmpeg](https://ffmpeg.org/download.html) is installed on your system. It **needs "ffprobe"** so unzip the full package!
-2.  **Link Path**: In **Admin Panel > Plugins > better-thumbnails**, set the **FFmpeg Executable Path** to the location of your `ffmpeg.exe` (e.g. `C:\ffmpeg\bin\ffmpeg.exe`).
-3.  **Optimize Performance**: If you have a powerful server, increase **Max Concurrent Generations** to `8` for faster bulk generation. On weaker VPS/Pi, keep it at `2-4`.
-4. **Animated Generation can be CPU intensive!** Care of this!
+1.  **Install FFmpeg**: Ensure [FFmpeg](https://ffmpeg.org/download.html) is on your system! You can extract it where "HFS" is. It **needs "ffprobe"** so unzip the full package!
+2.  **Install LibreOffice** (optional): Ensure [LibreOffice](https://libreoffice.org/download.html) is installed on your system too! It's used for the document thumbnail generation.
+3.  **Link Paths**: In **Admin Panel > Plugins > better-thumbnails-mod**::
+      - Set the **FFmpeg Executable Path** to the location of your `ffmpeg.exe` + `ffprobe.exe` (e.g. `C:\ffmpeg\bin\ffmpeg.exe`).
+      - (Optional) Set the **LibreOffice Executable Path** to the the location of your `soffice.exe` (e.g. C:/Program Files/LibreOffice/program/soffice.exe).
+4. **Optimize Performance**: If you have a powerful server, increase **Max Concurrent Generations** to `6-8` for faster bulk generation. On weaker VPS/Pi, keep it at `2-3`.
+5. **Animated Generation can be CPU intensive!** Care of this!
 
 ---
 
@@ -55,8 +58,9 @@ Settings are organized in **Admin Panel > Plugins > better-thumbnails-mod**.
 ### 2. Performance & System
 | Setting | Description | Default |
 | :--- | :--- | :--- |
-| **Max Concurrent Generations** | Limit parallel FFmpeg processes. Prevents CPU spikes during folder scans. | `2` |
+| **Max Concurrent Generations** | Limit parallel FFmpeg processes. Prevents CPU spikes during folder scans. | `3` |
 | **FFmpeg Executable Path** | **Required**. Absolute path to `ffmpeg` binary. | *Empty* |
+| **LibreOffice Executable Path** | **Optional**. Absolute path to `soffice` binary. | *Empty* |
 | **Log Generation** | Print console messages for every generated thumbnail. Useful for debugging. | `Off` |
 
 ---
@@ -90,12 +94,13 @@ This plugin works as an on-demand generation pipeline:
     *   **Miss**: Pushes task to **FIFO Queue**.
 4.  **Worker Processing**:
     *   **Audio**: `FFmpeg` extracts cover -> Reduces Frame into WEBP.
+    *   **Documents**: `LibreOffice` extracts front page into image -> Reduces Frame into WEBP.
     *   **Video**: `FFmpeg` extracts a 5 seconds intro + 2 seconds of scenes from the 20%, and 40% into a Temp Save -> Concats Frames into an animated WEBP -> Deletes Temps
 6.  **Finalize**: Writes to disk cache and streams to client.
 
 ### Dependencies
 *   **[FFmpeg](https://ffmpeg.org/)**: The universal multimedia framework.
-
+*   **[LibreOffice](https://libreoffice.org/)**: The free office suite.
 ---
 
 ## 🏆 Credits
