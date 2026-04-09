@@ -7,7 +7,7 @@
  * - "VenB304" for it's first original version.
  */
 
-exports.version = 7;
+exports.version = 8;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates images on server preventing frontend lag.";
 exports.apiRequired = 12.0;
 exports.repo = "RicardoEstep/hfs-better-thumbnails-mod";
@@ -31,7 +31,7 @@ exports.config = {
     },
     concurrency_limit: {
         type: 'number',
-        defaultValue: 2,
+        defaultValue: 3,
         min: 1, max: 32,
         label: "Max Concurrent Generations",
         helperText: "Maximum number of parallel thumbnails to generate. Higher = more CPU usage.",
@@ -42,6 +42,13 @@ exports.config = {
         fileMask: 'ffmpeg*',
         label: "FFmpeg Executable Path (Required)",
         helperText: "Path to ffmpeg binary (e.g. C:/ffmpeg/bin/ffmpeg.exe).",
+        xs: 12
+    },
+	soffice_path: {
+        type: 'real_path',
+        fileMask: '*soffice*',
+        label: "LibreOffice Path (soffice)",
+        helperText: "Path to LibreOffice 'soffice' Binary (e.g. C:/Program Files/LibreOffice/program/soffice.exe).",
         xs: 12
     },
     log: { type: 'boolean', defaultValue: false, label: "Log thumbnail generation" },
@@ -57,7 +64,8 @@ exports.init = async api => {
     const header = 'x-thumbnail';
     const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v'];
     const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
-    const MEDIA_WITH_COVERS = [...VIDEO_EXTS, ...AUDIO_EXTS];
+	const MEDIA_WITH_COVERS = [...VIDEO_EXTS, ...AUDIO_EXTS];
+	const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
 
 	// Setup Cache Directory
     const cacheDir = path.join(api.storageDir, 'thumbnails');
@@ -85,9 +93,10 @@ exports.init = async api => {
         queue.push({ task, resolve, reject });
         runQueue();
     });
-	
+
     const isVideo = (ext) => VIDEO_EXTS.includes(ext);
 	const isAudio = (ext) => AUDIO_EXTS.includes(ext);
+	const isDoc = (ext) => DOC_EXTS.includes(ext);
 
 	// Plugin Function.
     return {
@@ -98,8 +107,8 @@ exports.init = async api => {
             ctx.state.download_counter_ignore = true;
 
             return async () => {
-                if (!ctx.body && ctx.status !== 200) return; 
-                if (ctx.status === 304) return; 
+                if (!ctx.body && ctx.status !== 200) return;    // Only process if file exists
+                if (ctx.status === 304) return;    // Not modified
 
                 if (!api.getConfig('log')) ctx.state.dontLog = true;
 
@@ -110,7 +119,7 @@ exports.init = async api => {
                 const fileTs = ts || birthtimeMs;
                 const quality = api.getConfig('quality');
                 const pixels = api.getConfig('pixels');
-                
+
                 const w = Number(ctx.query.w) || pixels;
                 const h = Number(ctx.query.h) || w;
 
@@ -173,7 +182,7 @@ exports.init = async api => {
                                 console.debug(`Cover extraction failed/skipped for ${fileSource}:`, e.message);
                             }
                         }
-						
+
 						// 2. If Audio Files don't have any Cover.
 						if (AUDIO_EXTS.includes(ext)) {
 							ctx.status = 204; // No content.
@@ -196,7 +205,24 @@ exports.init = async api => {
                             return buf;
                         }
 
-                        // 5. Standard Images.
+						// 5. Document Thumbnails Handler.
+						if (DOC_EXTS.includes(ext)) {
+							const sofficePath = api.getConfig('soffice_path');
+							if (!sofficePath) return null;
+
+							ctx.set(header, 'office-to-webp');
+							
+							// 1. Extract first page using LibreOffice.
+							const rawImageBuffer = await extractDocumentThumbnail(fileSource, sofficePath);
+							
+							// 2. Convert to WebP using your existing image function.
+							const finalBuffer = await convertImageToWebP(rawImageBuffer, w, h, quality);
+							
+							await fs.writeFile(cacheFile, finalBuffer);
+							return finalBuffer;
+						}
+
+                        // 6. Standard Images.
                         if (size > 100 * 1024 * 1024) throw new Error("Image too large (>100MB)");
 
                         let sourceBuffer;
@@ -236,7 +262,7 @@ exports.init = async api => {
             };
         }
     };
-	
+
     function convertImageToWebP(imageBuffer, width, height, quality) {
         return new Promise((resolve, reject) => {
             const os = require('os');
@@ -288,7 +314,7 @@ exports.init = async api => {
             }).catch(err => reject(new Error(`Failed to write temp input: ${err.message}`)));
         });
     }
-		
+
     async function generateAnimatedVideoThumbnail(filePath, width, quality) {
         const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
         const ffprobePath = getFFprobePath(ffmpegPath);
@@ -405,6 +431,37 @@ exports.init = async api => {
                     resolve(fullBuffer);
                 } catch (err) {
                     reject(new Error(`Failed to read WebP: ${err.message}`));
+                }
+            });
+        });
+    }
+
+	async function extractDocumentThumbnail(filePath, sofficePath) {
+        const os = require('os');
+        const tmpDir = os.tmpdir();
+        // LibreOffice will create an output image file into temp, based on the server request.
+        const fileName = path.basename(filePath, path.extname(filePath));
+        const expectedOutput = path.join(tmpDir, `${fileName}.png`);
+
+        return new Promise((resolve, reject) => {
+            const args = [
+                '--headless',
+                '--convert-to', 'png',
+                '--outdir', tmpDir,
+                filePath
+            ];
+
+            const proc = spawn(sofficePath, args);
+            
+            proc.on('exit', async (code) => {
+                if (code !== 0) return reject(new Error(`LibreOffice failed with code ${code}`));
+
+                try {
+                    const buffer = await fs.readFile(expectedOutput);
+                    await fs.unlink(expectedOutput).catch(() => {});    // Clean up temporal extract.
+                    resolve(buffer);
+                } catch (err) {
+                    reject(new Error("Could not find generated document thumbnail."));
                 }
             });
         });
