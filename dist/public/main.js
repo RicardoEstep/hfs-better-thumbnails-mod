@@ -9,20 +9,22 @@
     const { h, t } = HFS;
     const config = HFS.getPluginConfig();
 
-    // List of video and audio extensions we support via FFmpeg
+    // List of video, audio and documents extensions we support via "FFmpeg and LibreOffice"
     // We treat them exactly like images now, because the server does the heavy lifting.
     const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v'];
 	const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
+	const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
 
     const isSupported = (entry) => {
         if (!entry) return false;
         const ext = entry.ext.toLowerCase();
 
-        // Server-side calculated support flag or Standard Image Exts, Video Exts or Audio Exts.
+        // Server-side calculated support flag or Standard Image Exts, Video Exts, Audio Exts or Document Exts.
         return entry._th
             || ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'avif', 'svg'].includes(ext)
             || VIDEO_EXTS.includes(ext)
-			|| AUDIO_EXTS.includes(ext);
+			|| AUDIO_EXTS.includes(ext)
+			|| DOC_EXTS.includes(ext);
     };
 
     // Component to properly handle hooks
@@ -30,8 +32,8 @@
         // Use ref to reset 'Instant-Show' binding
         const domRef = HFS.React.useRef(null);
 
-        // Check if this is a video or audio.
-        // For videos or audio, Instant-Show binds to the DEFAULT 'span.icon' immediately.
+        // Check if this is a video, audio or document.
+        // For videos, audio or documents, Instant-Show binds to the DEFAULT 'span.icon' immediately.
         // When we mount and replace it with OUR 'span.icon', the listener is lost (zombie).
         // We must force Instant-Show to find us.
         //
@@ -39,9 +41,10 @@
         // and binds correctly. If we reset bind here, it would double-bind (rendering bug).
         const isVideo = VIDEO_EXTS.includes(entry.ext.toLowerCase());
 		const isAudio = AUDIO_EXTS.includes(entry.ext.toLowerCase());
+		const isDoc = DOC_EXTS.includes(entry.ext.toLowerCase());
 
         HFS.React.useEffect(() => {
-            if ((isVideo || isAudio) && domRef.current) {
+            if ((isVideo || isAudio || isDoc) && domRef.current) {
                 const li = domRef.current.closest('li.file');
                 if (li && li.dataset.bound) {
                     // Reset the bind flag so Instant-Show finds the NEW icon
