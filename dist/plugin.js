@@ -7,7 +7,7 @@
  * - "VenB304" for it's first original version.
  */
 
-exports.version = 8;
+exports.version = 9;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates images on server preventing frontend lag.";
 exports.apiRequired = 12.0;
 exports.repo = "RicardoEstep/hfs-better-thumbnails-mod";
@@ -208,7 +208,10 @@ exports.init = async api => {
 						// 5. Document Thumbnails Handler.
 						if (DOC_EXTS.includes(ext)) {
 							const sofficePath = api.getConfig('soffice_path');
-							if (!sofficePath) return null;
+							if (!sofficePath) {
+								ctx.status = 204;    // If not PATH, return "empty".
+								return null;
+							}
 
 							ctx.set(header, 'office-to-webp');
 							
