@@ -1,4 +1,4 @@
-# Better Thumbnails Mod Plugin for HFS - V8
+# Better Thumbnails Mod Plugin for HFS - V9
 
 This is a **"FORK"** of the original PLUGIN, and very some of the changes were made **with an AI Agent**.
 
