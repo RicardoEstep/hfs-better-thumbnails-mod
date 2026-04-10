@@ -3,7 +3,7 @@
 This is a **"FORK"** of the original PLUGIN, and very some of the changes were made **with an AI Agent**.
 
 - PLEASE, **DON'T USE IT WITH THE ORIGINAL "Thumbnails" PLUGIN ENABLED!** It's already made to work same as the original plugin. Having it enabled will make every "animated webp" **static**. 🥲
-- It's main funtionality is supposed to **bypass** "Sharp" plugin too, so it's **not** necesary, but it **needs** external depencies as "FFmpeg" and "LibreOffice".
+- It's main funtionality is supposed to **bypass** "Sharp" plugin too, so it's **not** necesary, but it **needs** external depencies as **"FFmpeg"** & **"LibreOffice"**.
 
 Replace standard browser-based thumbnails with high-performance, server-side generated **static** and **animated** "webp" previews.
 The "cache-storage" is repaired and uses **SHA256**. It make animated thumbnails of GIF/WEBP images. And now, it extracts "covers" from music files, and every type of document files too!
