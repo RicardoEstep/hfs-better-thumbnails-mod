@@ -95,9 +95,9 @@ This plugin works as an on-demand generation pipeline:
     *   **Hit**: Serves file immediately (Zero CPU).
     *   **Miss**: Pushes task to **FIFO Queue**.
 4.  **Worker Processing**:
-    *   **Audio**: `FFmpeg` extracts cover -> Reduces Frame into WEBP.
-    *   **Documents**: `LibreOffice` extracts front page into image into a Temp Save -> Reduces Frame into WEBP -> Deletes Temps.
-    *   **Video**: `FFmpeg` extracts a 5 seconds intro + 2 seconds of scenes from the 20%, and 40% into a Temp Save -> Concats Frames into an animated WEBP -> Deletes Temps.
+    *   **Audio**: `FFmpeg` extracts cover -> `FFmpeg` Reduces Frame into WEBP.
+    *   **Documents**: `LibreOffice` extracts front page into image into a Temp Save -> `FFmpeg` Reduces Frame into WEBP -> Deletes Temps.
+    *   **Video**: `FFmpeg` extracts a 5 seconds intro + 2 seconds of scenes from the 20%, and 40% into a Temp Save -> `FFmpeg` Concats Frames into an animated WEBP -> Deletes Temps.
 6.  **Finalize**: Writes to disk cache and streams to client.
 
 ### Dependencies
