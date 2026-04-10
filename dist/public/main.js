@@ -1,9 +1,8 @@
 /**
  * Better Thumbnails Mod Frontend
- * 
- * Credits:
+ * * Credits:
  * - Based on 'thumbnails' frontend by Rejetto (https://github.com/rejetto/thumbnails)
- * - "VenB304" for it's first original version.
+ * - "VenB304" for its first original version.
  */
 'use strict'; {
     const { h, t } = HFS;
@@ -12,8 +11,8 @@
     // List of video, audio and documents extensions we support via "FFmpeg and LibreOffice"
     // We treat them exactly like images now, because the server does the heavy lifting.
     const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v'];
-	const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
-	const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
+    const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
+    const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
 
     const isSupported = (entry) => {
         if (!entry) return false;
@@ -23,8 +22,8 @@
         return entry._th
             || ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'avif', 'svg'].includes(ext)
             || VIDEO_EXTS.includes(ext)
-			|| AUDIO_EXTS.includes(ext)
-			|| DOC_EXTS.includes(ext);
+            || AUDIO_EXTS.includes(ext)
+            || DOC_EXTS.includes(ext);
     };
 
     // Component to properly handle hooks
@@ -40,8 +39,8 @@
         // For IMAGES, Instant-Show waits for 'img.thumbnail'. When we execute, it finds us
         // and binds correctly. If we reset bind here, it would double-bind (rendering bug).
         const isVideo = VIDEO_EXTS.includes(entry.ext.toLowerCase());
-		const isAudio = AUDIO_EXTS.includes(entry.ext.toLowerCase());
-		const isDoc = DOC_EXTS.includes(entry.ext.toLowerCase());
+        const isAudio = AUDIO_EXTS.includes(entry.ext.toLowerCase());
+        const isDoc = DOC_EXTS.includes(entry.ext.toLowerCase());
 
         HFS.React.useEffect(() => {
             if ((isVideo || isAudio || isDoc) && domRef.current) {
