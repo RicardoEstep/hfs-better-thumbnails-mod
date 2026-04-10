@@ -1,19 +1,19 @@
 /**
  * Better Thumbnails Mod Plugin
- * 
- * Credits:
+ * * Credits:
  * - Based on 'thumbnails' plugin by Rejetto (https://github.com/rejetto/thumbnails)
  * - FFmpeg integration inspired by 'videojs-player' and 'unsupported-videos'
- * - "VenB304" for it's first original version.
+ * - "VenB304" for its first original version.
  */
 
-exports.version = 9;
+exports.version = 10;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates images on server preventing frontend lag.";
 exports.apiRequired = 12.0;
 exports.repo = "RicardoEstep/hfs-better-thumbnails-mod";
 exports.frontend_js = 'main.js';
 
 exports.config = {
+    // --- Performance & Quality Settings ---
     quality: {
         type: 'number',
         defaultValue: 60,
@@ -37,6 +37,7 @@ exports.config = {
         helperText: "Maximum number of parallel thumbnails to generate. Higher = more CPU usage.",
         xs: 6
     },
+    // --- Path Settings ---
     ffmpeg_path: {
         type: 'real_path',
         fileMask: 'ffmpeg*',
@@ -44,40 +45,70 @@ exports.config = {
         helperText: "Path to ffmpeg binary (e.g. C:/ffmpeg/bin/ffmpeg.exe).",
         xs: 12
     },
-	soffice_path: {
+    soffice_path: {
         type: 'real_path',
         fileMask: '*soffice*',
         label: "LibreOffice Path (soffice)",
         helperText: "Path to LibreOffice 'soffice' Binary (e.g. C:/Program Files/LibreOffice/program/soffice.exe).",
         xs: 12
     },
+    // --- Maintenance ---
+    clear_cache: {
+        type: 'boolean',
+        defaultValue: false,
+        label: "Clear Thumbnail Cache",
+        helperText: "Switch this ON and click 'Apply/Save' to permanently delete the Generated Cache. It will turn itself Off automatically.",
+        xs: 12
+    },
     log: { type: 'boolean', defaultValue: false, label: "Log thumbnail generation" },
 };
 
+
 exports.init = async api => {
-    const { createReadStream, createWriteStream, promises: fs } = api.require('fs');
+    const { createReadStream, promises: fs } = api.require('fs');
     const path = api.require('path');
-    const crypto = api.require('crypto'); // For SHA256 hashing.
+    const crypto = api.require('crypto');    // For SHA256 hashing.
     const { buffer } = api.require('node:stream/consumers');
     const { spawn } = api.require('child_process');
+	const os = api.require('os');
 
     const header = 'x-thumbnail';
     const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v'];
     const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
-	const MEDIA_WITH_COVERS = [...VIDEO_EXTS, ...AUDIO_EXTS];
-	const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
+    const MEDIA_WITH_COVERS = [...VIDEO_EXTS, ...AUDIO_EXTS];
+    const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
 
-	// Setup Cache Directory
+    // Setup Cache Directory
     const cacheDir = path.join(api.storageDir, 'thumbnails');
     await fs.mkdir(cacheDir, { recursive: true }).catch(err => console.error("BetterThumbnails: Failed to create cache dir", err));
 
-	// Concurrency Queue
+	// Listen for the "Cleaning Cache" Trigger
+    api.subscribeConfig('clear_cache', async (value) => {
+        // Executes when the user flips it to "TRUE"
+        if (value === true) {
+            try {
+                // Remove content and recreate the directory again
+                await fs.rm(cacheDir, { recursive: true, force: true });
+                await fs.mkdir(cacheDir, { recursive: true });
+                
+                api.log("BetterThumbnailsMod: Cache cleared manually via settings.");
+            } catch (e) {
+                api.log("BetterThumbnailsMod: Failed to clear cache: " + e.message);
+            }
+
+            // Immediately reset back to "false" after use.
+            api.setConfig('clear_cache', false);
+        }
+    });
+
+    // Concurrency Queue
     const queue = [];
     let active = 0;
+    const MAX_QUEUE_SIZE = 50;    // FIFO Max Queue, for Security.
     const inFlightRequests = new Map();
 
     const runQueue = () => {
-        const limit = api.getConfig('concurrency_limit') || 4;
+        const limit = api.getConfig('concurrency_limit') || 3;
         if (active >= limit || queue.length === 0) return;
 
         active++;
@@ -90,15 +121,24 @@ exports.init = async api => {
     };
 
     const enqueue = (task) => new Promise((resolve, reject) => {
+        if (queue.length >= MAX_QUEUE_SIZE) {
+            return reject(new Error("Thumbnail queue is full. Server too busy."));
+        }
         queue.push({ task, resolve, reject });
         runQueue();
     });
 
-    const isVideo = (ext) => VIDEO_EXTS.includes(ext);
-	const isAudio = (ext) => AUDIO_EXTS.includes(ext);
-	const isDoc = (ext) => DOC_EXTS.includes(ext);
+    // Helper to generate safe temp filenames
+    const getTempPath = (prefix, ext = '') => {
+        const randomHex = crypto.randomBytes(8).toString('hex');
+        return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${randomHex}${ext}`);
+    };
 
-	// Plugin Function.
+    const isVideo = (ext) => VIDEO_EXTS.includes(ext);
+    const isAudio = (ext) => AUDIO_EXTS.includes(ext);
+    const isDoc = (ext) => DOC_EXTS.includes(ext);
+
+    // Plugin Function.
     return {
         middleware(ctx) {
             if (ctx.query.get !== 'thumb') return;
@@ -120,10 +160,13 @@ exports.init = async api => {
                 const quality = api.getConfig('quality');
                 const pixels = api.getConfig('pixels');
 
-                const w = Number(ctx.query.w) || pixels;
-                const h = Number(ctx.query.h) || w;
+                // Security: Validate and clamp dimensions
+                const rawW = parseInt(ctx.query.w, 10);
+                const rawH = parseInt(ctx.query.h, 10);
+                const w = Math.max(10, Math.min(2000, isNaN(rawW) ? pixels : rawW));
+                const h = Math.max(10, Math.min(2000, isNaN(rawH) ? w : rawH));
 
-				// Calculate Cache Key
+                // Calculate Cache Key
                 const safeSize = size ? size.toString() : '0';
                 const safeTs = fileTs ? Math.floor(fileTs).toString() : '0';
                 const cacheKeyStr = `${fileSource}|${safeSize}|${safeTs}|${w}|${h}|${quality}`;
@@ -150,11 +193,11 @@ exports.init = async api => {
                         ctx.body = outputBuffer;
                         return;
                     } catch (e) {
-                        // If the pending generation failed, fall through to try again
+                        // Fall through to try again
                     }
                 }
 
-				// Generate (Queued)
+                // Generate (Queued)
                 const ext = path.extname(fileSource).replace('.', '').toLowerCase();
 
                 // Create the "Generation Task".
@@ -183,11 +226,11 @@ exports.init = async api => {
                             }
                         }
 
-						// 2. If Audio Files don't have any Cover.
-						if (AUDIO_EXTS.includes(ext)) {
-							ctx.status = 204; // No content.
-							return null;
-						}
+                        // 2. If Audio Files don't have any Cover.
+                        if (AUDIO_EXTS.includes(ext)) {
+                            ctx.status = 204; // No content.
+                            return null;
+                        }
 
                         // 3. Generate Animated Video Thumbnail.
                         if (isVideo(ext)) {
@@ -205,47 +248,47 @@ exports.init = async api => {
                             return buf;
                         }
 
-						// 5. Document Thumbnails Handler.
-						if (DOC_EXTS.includes(ext)) {
-							const sofficePath = api.getConfig('soffice_path');
-							if (!sofficePath) {
-								ctx.status = 204;    // If not PATH, return "empty".
-								return null;
-							}
+                        // 5. Document Thumbnails Handler.
+                        if (DOC_EXTS.includes(ext)) {
+                            const sofficePath = api.getConfig('soffice_path');
+                            if (!sofficePath) {
+                                ctx.status = 204;    // If not PATH, return "empty".
+                                return null;
+                            }
 
-							ctx.set(header, 'office-to-webp');
-							
-							// 1. Extract first page using LibreOffice.
-							const rawImageBuffer = await extractDocumentThumbnail(fileSource, sofficePath);
-							
-							// 2. Convert to WebP using your existing image function.
-							const finalBuffer = await convertImageToWebP(rawImageBuffer, w, h, quality);
-							
-							await fs.writeFile(cacheFile, finalBuffer);
-							return finalBuffer;
-						}
+                            ctx.set(header, 'office-to-webp');
+                            
+                            // 1. Extract first page using LibreOffice.
+                            const rawImageBuffer = await extractDocumentThumbnail(fileSource, sofficePath);
+                            
+                            // 2. Convert to WebP using your existing image function.
+                            const finalBuffer = await convertImageToWebP(rawImageBuffer, w, h, quality);
+                            
+                            await fs.writeFile(cacheFile, finalBuffer);
+                            return finalBuffer;
+                        }
 
                         // 6. Standard Images.
                         if (size > 100 * 1024 * 1024) throw new Error("Image too large (>100MB)");
 
-                        let sourceBuffer;
-                        if (ctx.body && typeof ctx.body.pipe === 'function') {
-                            sourceBuffer = await buffer(ctx.body);
-                        } else {
-                            sourceBuffer = await fs.readFile(fileSource);
-                        }
-
-                        if (!sourceBuffer || sourceBuffer.length === 0) throw new Error("Empty buffer");
-
                         ctx.set(header, 'image-generated-webp');
-                        
-                        const finalBuffer = await convertImageToWebP(sourceBuffer, w, h, quality);
+
+                        let finalBuffer;
+                        if (!ctx.body || typeof ctx.body.pipe !== 'function') {
+                            // File exists on disk: let FFmpeg read it directly (Saves RAM, still compresses to WebP!)
+                            finalBuffer = await convertFileToWebP(fileSource, w, h, quality, ffmpegPath);
+                        } else {
+                            // File is an active stream (not fully on disk): buffer it first
+                            const sourceBuffer = await buffer(ctx.body);
+                            if (!sourceBuffer || sourceBuffer.length === 0) throw new Error("Empty buffer");
+                            finalBuffer = await convertImageToWebP(sourceBuffer, w, h, quality);
+                        }
 
                         await fs.writeFile(cacheFile, finalBuffer);
                         return finalBuffer;
                     });
-					
-					// Serve.
+                    
+                    // Serve.
                     return outputBuffer;
                 })();
 
@@ -257,7 +300,7 @@ exports.init = async api => {
                     ctx.body = outputBuffer;
                 } catch (e) {
                     console.error(`BetterThumbnailsMod Error [${fileSource}]:`, e.message);
-                    ctx.status = 500;
+                    ctx.status = e.message.includes("queue is full") ? 503 : 500;
                     ctx.body = e.message;
                 } finally {
                     inFlightRequests.delete(cacheHash);
@@ -266,76 +309,90 @@ exports.init = async api => {
         }
     };
 
+    // Buffer to WebP
     function convertImageToWebP(imageBuffer, width, height, quality) {
         return new Promise((resolve, reject) => {
-            const os = require('os');
             const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
-            const tmpInput = path.join(os.tmpdir(), `input-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-            const tmpOutput = path.join(os.tmpdir(), `output-${Date.now()}-${Math.random().toString(36).slice(2)}.webp`);
+            const tmpInput = getTempPath('input');
+            const tmpOutput = getTempPath('output', '.webp');
 
-            // Write "input buffer" to "temp file".
             fs.writeFile(tmpInput, imageBuffer).then(() => {
-                const args = [
-                    '-i', tmpInput,
-                    '-vf', `scale='min(${width},iw)':'min(${height},ih)':force_original_aspect_ratio=decrease`,
-                    '-c:v', 'libwebp',
-                    '-q:v', quality.toString(),
-                    '-y',
-                    tmpOutput
-                ];
-
-                const proc = spawn(ffmpegPath, args);
-                const stderrChunks = [];
-
-                proc.stderr.on('data', chunk => stderrChunks.push(chunk));
-                
-                proc.on('error', err => {
-                    fs.unlink(tmpInput).catch(() => {});
-                    fs.unlink(tmpOutput).catch(() => {});
-                    reject(err);
-                });
-
-                proc.on('exit', async (code) => {
-                    if (code !== 0) {
-                        const stderr = Buffer.concat(stderrChunks).toString();
+                runFFmpegConversion(ffmpegPath, tmpInput, tmpOutput, width, height, quality)
+                    .then(resolve)
+                    .catch(reject)
+                    .finally(() => {
                         fs.unlink(tmpInput).catch(() => {});
-                        fs.unlink(tmpOutput).catch(() => {});
-                        return reject(new Error(`FFmpeg WebP conversion failed (${code}): ${stderr}`));
-                    }
-
-                    try {
-                        const webpBuffer = await fs.readFile(tmpOutput);
-                        await fs.unlink(tmpInput).catch(() => {});
-                        await fs.unlink(tmpOutput).catch(() => {});
-                        
-                        if (webpBuffer.length === 0) return reject(new Error("FFmpeg produced empty WebP"));
-                        resolve(webpBuffer);
-                    } catch (err) {
-                        reject(new Error(`Failed to read WebP output: ${err.message}`));
-                    }
-                });
+                    });
             }).catch(err => reject(new Error(`Failed to write temp input: ${err.message}`)));
         });
     }
+    
+    // Direct File to WebP (Saves RAM)
+    function convertFileToWebP(filePath, width, height, quality, ffmpegPath) {
+        const tmpOutput = getTempPath('output', '.webp');
+        return runFFmpegConversion(ffmpegPath, filePath, tmpOutput, width, height, quality);
+    }
+    
+    // Core conversion logic shared by both image functions
+    function runFFmpegConversion(ffmpegPath, inputPath, outputPath, width, height, quality) {
+        return new Promise((resolve, reject) => {
+            const args = [
+                '-i', inputPath,
+                '-vf', `scale='min(${width},iw)':'min(${height},ih)':force_original_aspect_ratio=decrease`,
+                '-c:v', 'libwebp',
+                '-q:v', quality.toString(),
+                '-y',
+                outputPath
+            ];
 
+            const proc = spawn(ffmpegPath, args);
+            const stderrChunks = [];
+
+            proc.stderr.on('data', chunk => stderrChunks.push(chunk));
+            
+            proc.on('error', err => {
+                fs.unlink(outputPath).catch(() => {});
+                reject(err);
+            });
+
+            proc.on('exit', async (code) => {
+                if (code !== 0) {
+                    const stderr = Buffer.concat(stderrChunks).toString();
+                    fs.unlink(outputPath).catch(() => {});
+                    return reject(new Error(`FFmpeg WebP conversion failed (${code}): ${stderr}`));
+                }
+
+                try {
+                    const webpBuffer = await fs.readFile(outputPath);
+                    await fs.unlink(outputPath).catch(() => {});
+                    
+                    if (webpBuffer.length === 0) return reject(new Error("FFmpeg produced empty WebP"));
+                    resolve(webpBuffer);
+                } catch (err) {
+                    reject(new Error(`Failed to read WebP output: ${err.message}`));
+                }
+            });
+        });
+    }
+
+    // Video Thumbnails Function.
     async function generateAnimatedVideoThumbnail(filePath, width, quality) {
         const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
         const ffprobePath = getFFprobePath(ffmpegPath);
-        const os = require('os');
 
         const duration = await getVideoDuration(filePath, ffprobePath);
 
         let segments = [];
-		if (duration < 6) {
-			// Videos less than 6 seconds - Make a full thumbnail.
-			segments = [{ start: 0, duration: duration }];
+        if (duration < 6) {
+            // Videos less than 6 seconds - Make a full thumbnail.
+            segments = [{ start: 0, duration: duration }];
         }
-		else if (duration < 30) {
-			// Videos less than 30 seconds - First 5 seconds only.
+        else if (duration < 30) {
+            // Videos less than 30 seconds - First 5 seconds only.
             segments = [{ start: 0, duration: 5 }];
         }
         else {
-			// Every other video - First 4 seconds + 4 More with some Segments.
+            // Every other video - First 4 seconds + 4 More with some Segments.
             segments = [
                 { start: 0, duration: 4 },
                 { start: duration * 0.20, duration: 2 },
@@ -343,23 +400,20 @@ exports.init = async api => {
             ];
         }
 
-        const tmpFile = path.join(os.tmpdir(), `ffmpeg-tmp-${Date.now()}-${Math.random().toString(36).slice(2)}.webp`);
+        const tmpFile = getTempPath('ffmpeg-tmp', '.webp');
 
         return new Promise((resolve, reject) => {
             const args = [];
-            
             segments.forEach(seg => {
                 args.push('-ss', seg.start.toFixed(2), '-t', seg.duration.toFixed(2), '-i', filePath);
             });
 
             let filterString = '';
             let concatInputs = '';
-            
             segments.forEach((seg, index) => {
                 filterString += `[${index}:v]fps=10,scale='min(${width},iw)':-2[v${index}]; `;
                 concatInputs += `[v${index}]`;
             });
-            
             filterString += `${concatInputs}concat=n=${segments.length}:v=1:a=0[outv]`;
 
             args.push(
@@ -389,7 +443,6 @@ exports.init = async api => {
                 try {
                     const fullBuffer = await fs.readFile(tmpFile);
                     await fs.unlink(tmpFile).catch(() => {});
-                    
                     if (fullBuffer.length === 0) return reject(new Error("FFmpeg produced an empty WebP output"));
                     resolve(fullBuffer);
                 } catch (err) {
@@ -399,10 +452,10 @@ exports.init = async api => {
         });
     }
 
+    // GIF Thumbnail Function.
     async function generateAnimatedGifThumbnail(filePath, width, quality) {
         const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
-        const os = require('os');
-        const tmpFile = path.join(os.tmpdir(), `ffmpeg-gif-${Date.now()}-${Math.random().toString(36).slice(2)}.webp`);
+        const tmpFile = getTempPath('ffmpeg-gif', '.webp');
 
         return new Promise((resolve, reject) => {
             const args = [
@@ -439,8 +492,8 @@ exports.init = async api => {
         });
     }
 
-	async function extractDocumentThumbnail(filePath, sofficePath) {
-        const os = require('os');
+    // Document Thumbnail Extraction.
+    async function extractDocumentThumbnail(filePath, sofficePath) {
         const tmpDir = os.tmpdir();
         // LibreOffice will create an output image file into temp, based on the server request.
         const fileName = path.basename(filePath, path.extname(filePath));
@@ -461,7 +514,7 @@ exports.init = async api => {
 
                 try {
                     const buffer = await fs.readFile(expectedOutput);
-                    await fs.unlink(expectedOutput).catch(() => {});    // Clean up temporal extract.
+                    await fs.unlink(expectedOutput).catch(() => {}); 
                     resolve(buffer);
                 } catch (err) {
                     reject(new Error("Could not find generated document thumbnail."));
@@ -470,6 +523,7 @@ exports.init = async api => {
         });
     }
 
+    // Video Duration
     function getVideoDuration(filePath, ffprobePath) {
         return new Promise((resolve) => {
             const args = [
@@ -489,6 +543,7 @@ exports.init = async api => {
         });
     }
 
+    // FFProbe PATH = FFMpeg PATH
     function getFFprobePath(ffmpegPath) {
         const dir = path.dirname(ffmpegPath);
         const ext = path.extname(ffmpegPath);
@@ -500,6 +555,7 @@ exports.init = async api => {
         return 'ffprobe';
     }
 
+    // Parse multimedia file for covers.
     function getAttachedPictureStreamIndex(filePath, ffprobePath) {
         return new Promise((resolve, reject) => {
             const args = [
@@ -537,6 +593,7 @@ exports.init = async api => {
         });
     }
 
+    // Extract Integrated Cover
     function extractEmbeddedThumbnail(filePath, streamIndex, ffmpegPath) {
         return new Promise((resolve, reject) => {
             const args = [
