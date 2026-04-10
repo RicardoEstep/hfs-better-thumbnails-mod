@@ -1,4 +1,4 @@
-# Better Thumbnails Mod Plugin for HFS - V9
+# Better Thumbnails Mod Plugin for HFS - V10
 
 This is a **"FORK"** of the original PLUGIN, and very some of the changes were made **with an AI Agent**.
 
@@ -7,6 +7,8 @@ This is a **"FORK"** of the original PLUGIN, and very some of the changes were m
 
 Replace standard browser-based thumbnails with high-performance, server-side generated **static** and **animated** "webp" previews.
 The "cache-storage" is repaired and uses **SHA256**. It make animated thumbnails of GIF/WEBP images. And now, it extracts "covers" from music files, and every type of document files too!
+
+The "V10" version was made with "Security" in Mind - While it was patched for some different "security flaws" and "RAM handles", the code is presented "as is". There are still some security issues but CAN be handled just by "good configurations" and "good resources". What i mean with this, I'm not responsible of the files uploaded into your server that this plugin CAN open automaticlly. Be aware!
 
 ## 🌟 Capabilities
 
