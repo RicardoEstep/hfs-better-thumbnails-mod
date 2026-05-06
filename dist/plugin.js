@@ -6,7 +6,7 @@
  * - "VenB304" for its first original version.
  */
 
-exports.version = 10;
+exports.version = 11;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates images on server preventing frontend lag.";
 exports.apiRequired = 12.0;
 exports.repo = "RicardoEstep/hfs-better-thumbnails-mod";
@@ -35,6 +35,15 @@ exports.config = {
         min: 1, max: 32,
         label: "Max Concurrent Generations",
         helperText: "Maximum number of parallel thumbnails to generate. Higher = more CPU usage.",
+        xs: 6
+    },
+    max_image_size: {
+        type: 'number',
+        defaultValue: 100,
+        min: 1, max: 1000,
+        label: "Max Image Size (MB)",
+        helperText: "Maximum file size to process as image thumbnail. Larger files are skipped.",
+        unit: 'MB',
         xs: 6
     },
     // --- Path Settings ---
@@ -70,19 +79,27 @@ exports.init = async api => {
     const crypto = api.require('crypto');    // For SHA256 hashing.
     const { buffer } = api.require('node:stream/consumers');
     const { spawn } = api.require('child_process');
-	const os = api.require('os');
+    const os = api.require('os');
 
+    // --- CONSTANTS ---
     const header = 'x-thumbnail';
     const VIDEO_EXTS = ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'ts', 'm4v'];
     const AUDIO_EXTS = ['mp3', 'aac', 'flac', 'm4a', 'ogg', 'wav', 'opus', 'oga', 'wma'];
     const MEDIA_WITH_COVERS = [...VIDEO_EXTS, ...AUDIO_EXTS];
     const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
+    const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'avif', 'svg'];
+    const MAX_QUEUE_SIZE = 50;    // FIFO Max Queue, for Security
+    const FFPROBE_TIMEOUT = 5000; // ms
+    const FFMPEG_TIMEOUT = 30000; // ms
+    const SOFFICE_TIMEOUT = 15000; // ms
 
     // Setup Cache Directory
     const cacheDir = path.join(api.storageDir, 'thumbnails');
-    await fs.mkdir(cacheDir, { recursive: true }).catch(err => console.error("BetterThumbnails: Failed to create cache dir", err));
+    await fs.mkdir(cacheDir, { recursive: true }).catch(err => {
+        console.error("BetterThumbnails: Failed to create cache dir", err);
+    });
 
-	// Listen for the "Cleaning Cache" Trigger
+    // Listen for the "Cleaning Cache" Trigger
     api.subscribeConfig('clear_cache', async (value) => {
         // Executes when the user flips it to "TRUE"
         if (value === true) {
@@ -104,9 +121,9 @@ exports.init = async api => {
     // Concurrency Queue
     const queue = [];
     let active = 0;
-    const MAX_QUEUE_SIZE = 50;    // FIFO Max Queue, for Security.
     const inFlightRequests = new Map();
 
+    // Execute queued tasks with concurrency control
     const runQueue = () => {
         const limit = api.getConfig('concurrency_limit') || 3;
         if (active >= limit || queue.length === 0) return;
@@ -114,12 +131,16 @@ exports.init = async api => {
         active++;
         const { task, resolve, reject } = queue.shift();
 
-        task().then(resolve).catch(reject).finally(() => {
-            active--;
-            runQueue();
-        });
+        task()
+            .then(resolve)
+            .catch(reject)
+            .finally(() => {
+                active--;
+                runQueue();
+            });
     };
 
+    // Add task to queue with size limit
     const enqueue = (task) => new Promise((resolve, reject) => {
         if (queue.length >= MAX_QUEUE_SIZE) {
             return reject(new Error("Thumbnail queue is full. Server too busy."));
@@ -128,15 +149,30 @@ exports.init = async api => {
         runQueue();
     });
 
-    // Helper to generate safe temp filenames
+    // Generate safe temporary file path with random identifier
     const getTempPath = (prefix, ext = '') => {
         const randomHex = crypto.randomBytes(8).toString('hex');
         return path.join(os.tmpdir(), `${prefix}-${Date.now()}-${randomHex}${ext}`);
     };
 
+    // Helper to safely cleanup temp files
+    const cleanupTempFile = async (filePath) => {
+        try {
+            await fs.unlink(filePath);
+        } catch (e) {
+            // Silent - file may not exist
+        }
+    };
+
+    // Helper to safely cleanup multiple temp files
+    const cleanupTempFiles = async (filePaths) => {
+        await Promise.all(filePaths.map(cleanupTempFile));
+    };
+
     const isVideo = (ext) => VIDEO_EXTS.includes(ext);
     const isAudio = (ext) => AUDIO_EXTS.includes(ext);
     const isDoc = (ext) => DOC_EXTS.includes(ext);
+    const isImage = (ext) => IMAGE_EXTS.includes(ext);
 
     // Plugin Function.
     return {
@@ -166,7 +202,7 @@ exports.init = async api => {
                 const w = Math.max(10, Math.min(2000, isNaN(rawW) ? pixels : rawW));
                 const h = Math.max(10, Math.min(2000, isNaN(rawH) ? w : rawH));
 
-                // Calculate Cache Key
+                // Calculate Cache Key - includes ALL parameters that affect output
                 const safeSize = size ? size.toString() : '0';
                 const safeTs = fileTs ? Math.floor(fileTs).toString() : '0';
                 const cacheKeyStr = `${fileSource}|${safeSize}|${safeTs}|${w}|${h}|${quality}`;
@@ -185,15 +221,21 @@ exports.init = async api => {
                 } catch (e) { /* Missing cache is normal */ }
 
                 // Fallback: Check In-Flight Requests (Memory Deduplication)
+                // IMPORTANT: Only use in-flight cache if first request succeeded!
                 if (inFlightRequests.has(cacheHash)) {
                     try {
-                        const outputBuffer = await inFlightRequests.get(cacheHash);
+                        const result = await inFlightRequests.get(cacheHash);
+                        // Check if result is an error
+                        if (result instanceof Error) {
+                            throw result;
+                        }
                         ctx.set(header, 'cache-memory-dedup');
                         ctx.type = 'image/webp';
-                        ctx.body = outputBuffer;
+                        ctx.body = result;
                         return;
                     } catch (e) {
-                        // Fall through to try again
+                        // Fall through to try again - first request failed, let's retry
+                        inFlightRequests.delete(cacheHash);
                     }
                 }
 
@@ -202,100 +244,119 @@ exports.init = async api => {
 
                 // Create the "Generation Task".
                 const generationTask = (async () => {
-                    const outputBuffer = await enqueue(async () => {
-                        const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
-                        const ffprobePath = getFFprobePath(ffmpegPath);
+                    try {
+                        const outputBuffer = await enqueue(async () => {
+                            const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
+                            const ffprobePath = getFFprobePath(ffmpegPath);
 
-                        // 1. Check for Embedded Cover Art (Audio & Video)
-                        if (MEDIA_WITH_COVERS.includes(ext)) {
-                            try {
-                                const streamIndex = await getAttachedPictureStreamIndex(fileSource, ffprobePath);
-                                
-                                if (streamIndex !== null) {
-                                    ctx.set(header, 'ffmpeg-extracted-cover');
-                                    const coverBuffer = await extractEmbeddedThumbnail(fileSource, streamIndex, ffmpegPath);
+                            // 1. Check for Embedded Cover Art (Audio & Video)
+                            if (MEDIA_WITH_COVERS.includes(ext)) {
+                                try {
+                                    const streamIndex = await getAttachedPictureStreamIndex(fileSource, ffprobePath);
                                     
-                                    // Convert to WebP using FFmpeg directly
-                                    const finalBuffer = await convertImageToWebP(coverBuffer, w, h, quality);
-                                    
-                                    await fs.writeFile(cacheFile, finalBuffer);
-                                    return finalBuffer;
+                                    if (streamIndex !== null) {
+                                        ctx.set(header, 'ffmpeg-extracted-cover');
+                                        const coverBuffer = await extractEmbeddedThumbnail(fileSource, streamIndex, ffmpegPath);
+                                        
+                                        // Convert to WebP using FFmpeg directly
+                                        const finalBuffer = await convertImageToWebP(coverBuffer, w, h, quality);
+                                        
+                                        await fs.writeFile(cacheFile, finalBuffer);
+                                        return finalBuffer;
+                                    }
+                                } catch (e) {
+                                    // Log but continue to fallback (e.g., no cover art)
+                                    if (api.getConfig('log')) {
+                                        console.debug(`Cover extraction failed/skipped for ${fileSource}:`, e.message);
+                                    }
                                 }
-                            } catch (e) {
-                                console.debug(`Cover extraction failed/skipped for ${fileSource}:`, e.message);
                             }
-                        }
 
-                        // 2. If Audio Files don't have any Cover.
-                        if (AUDIO_EXTS.includes(ext)) {
-                            ctx.status = 204; // No content.
-                            return null;
-                        }
-
-                        // 3. Generate Animated Video Thumbnail.
-                        if (isVideo(ext)) {
-                            ctx.set(header, 'ffmpeg-animated');
-                            const buf = await generateAnimatedVideoThumbnail(fileSource, w, quality);
-                            await fs.writeFile(cacheFile, buf);
-                            return buf;
-                        }
-
-                        // 4. Animated GIF/WebP.
-                        if (['gif', 'webp'].includes(ext)) {
-                            ctx.set(header, 'ffmpeg-gif-to-webp');
-                            const buf = await generateAnimatedGifThumbnail(fileSource, w, quality);
-                            await fs.writeFile(cacheFile, buf);
-                            return buf;
-                        }
-
-                        // 5. Document Thumbnails Handler.
-                        if (DOC_EXTS.includes(ext)) {
-                            const sofficePath = api.getConfig('soffice_path');
-                            if (!sofficePath) {
-                                ctx.status = 204;    // If not PATH, return "empty".
+                            // 2. If Audio Files don't have any Cover.
+                            if (AUDIO_EXTS.includes(ext)) {
+                                ctx.status = 204; // No content.
                                 return null;
                             }
 
-                            ctx.set(header, 'office-to-webp');
-                            
-                            // 1. Extract first page using LibreOffice.
-                            const rawImageBuffer = await extractDocumentThumbnail(fileSource, sofficePath);
-                            
-                            // 2. Convert to WebP using your existing image function.
-                            const finalBuffer = await convertImageToWebP(rawImageBuffer, w, h, quality);
-                            
+                            // 3. Generate Animated Video Thumbnail.
+                            if (isVideo(ext)) {
+                                ctx.set(header, 'ffmpeg-animated');
+                                const buf = await generateAnimatedVideoThumbnail(fileSource, w, quality);
+                                await fs.writeFile(cacheFile, buf);
+                                return buf;
+                            }
+
+                            // 4. Animated GIF/WebP.
+                            if (['gif', 'webp'].includes(ext)) {
+                                ctx.set(header, 'ffmpeg-gif-to-webp');
+                                const buf = await generateAnimatedGifThumbnail(fileSource, w, quality);
+                                await fs.writeFile(cacheFile, buf);
+                                return buf;
+                            }
+
+                            // 5. Document Thumbnails Handler.
+                            if (DOC_EXTS.includes(ext)) {
+                                const sofficePath = api.getConfig('soffice_path');
+                                if (!sofficePath) {
+                                    ctx.status = 204;    // If not PATH, return "empty".
+                                    return null;
+                                }
+
+                                ctx.set(header, 'office-to-webp');
+                                
+                                // 1. Extract first page using LibreOffice.
+                                const rawImageBuffer = await extractDocumentThumbnail(fileSource, sofficePath, cacheHash);
+                                
+                                // 2. Convert to WebP using existing image function.
+                                const finalBuffer = await convertImageToWebP(rawImageBuffer, w, h, quality);
+                                
+                                await fs.writeFile(cacheFile, finalBuffer);
+                                return finalBuffer;
+                            }
+
+                            // 6. Standard Images.
+                            const maxSizeBytes = (api.getConfig('max_image_size') || 100) * 1024 * 1024;
+                            if (size > maxSizeBytes) {
+                                throw new Error(`Image too large (>${maxSizeBytes / 1024 / 1024}MB)`);
+                            }
+
+                            if (!isImage(ext)) {
+                                ctx.status = 204; // Unsupported format
+                                return null;
+                            }
+
+                            ctx.set(header, 'image-generated-webp');
+
+                            let finalBuffer;
+                            if (!ctx.body || typeof ctx.body.pipe !== 'function') {
+                                // File exists on disk: let FFmpeg read it directly (Saves RAM!)
+                                finalBuffer = await convertFileToWebP(fileSource, w, h, quality, ffmpegPath);
+                            } else {
+                                // File is an active stream (not fully on disk): buffer it first
+                                const sourceBuffer = await buffer(ctx.body);
+                                if (!sourceBuffer || sourceBuffer.length === 0) throw new Error("Empty buffer");
+                                finalBuffer = await convertImageToWebP(sourceBuffer, w, h, quality);
+                            }
+
                             await fs.writeFile(cacheFile, finalBuffer);
                             return finalBuffer;
-                        }
-
-                        // 6. Standard Images.
-                        if (size > 100 * 1024 * 1024) throw new Error("Image too large (>100MB)");
-
-                        ctx.set(header, 'image-generated-webp');
-
-                        let finalBuffer;
-                        if (!ctx.body || typeof ctx.body.pipe !== 'function') {
-                            // File exists on disk: let FFmpeg read it directly (Saves RAM, still compresses to WebP!)
-                            finalBuffer = await convertFileToWebP(fileSource, w, h, quality, ffmpegPath);
-                        } else {
-                            // File is an active stream (not fully on disk): buffer it first
-                            const sourceBuffer = await buffer(ctx.body);
-                            if (!sourceBuffer || sourceBuffer.length === 0) throw new Error("Empty buffer");
-                            finalBuffer = await convertImageToWebP(sourceBuffer, w, h, quality);
-                        }
-
-                        await fs.writeFile(cacheFile, finalBuffer);
-                        return finalBuffer;
-                    });
-                    
-                    // Serve.
-                    return outputBuffer;
+                        });
+                        
+                        return outputBuffer;
+                    } catch (err) {
+                        // Store error so in-flight requests also fail appropriately
+                        throw err;
+                    }
                 })();
 
                 inFlightRequests.set(cacheHash, generationTask);
 
                 try {
                     const outputBuffer = await generationTask;
+                    if (outputBuffer === null) {
+                        // Already handled (204 No Content)
+                        return;
+                    }
                     ctx.type = 'image/webp';
                     ctx.body = outputBuffer;
                 } catch (e) {
@@ -309,31 +370,34 @@ exports.init = async api => {
         }
     };
 
-    // Buffer to WebP
+    // Convert image buffer to WebP with specified dimensions and quality
     function convertImageToWebP(imageBuffer, width, height, quality) {
         return new Promise((resolve, reject) => {
             const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
             const tmpInput = getTempPath('input');
             const tmpOutput = getTempPath('output', '.webp');
 
-            fs.writeFile(tmpInput, imageBuffer).then(() => {
-                runFFmpegConversion(ffmpegPath, tmpInput, tmpOutput, width, height, quality)
-                    .then(resolve)
-                    .catch(reject)
-                    .finally(() => {
-                        fs.unlink(tmpInput).catch(() => {});
-                    });
-            }).catch(err => reject(new Error(`Failed to write temp input: ${err.message}`)));
+            fs.writeFile(tmpInput, imageBuffer)
+                .then(() => {
+                    runFFmpegConversion(ffmpegPath, tmpInput, tmpOutput, width, height, quality)
+                        .then(resolve)
+                        .catch(reject)
+                        .finally(() => cleanupTempFile(tmpInput));
+                })
+                .catch(err => {
+                    cleanupTempFile(tmpInput); // cleanup on failure
+                    reject(new Error(`Failed to write temp input: ${err.message}`));
+                });
         });
     }
     
-    // Direct File to WebP (Saves RAM)
+    // Convert file directly to WebP (keeps large files off RAM)
     function convertFileToWebP(filePath, width, height, quality, ffmpegPath) {
         const tmpOutput = getTempPath('output', '.webp');
         return runFFmpegConversion(ffmpegPath, filePath, tmpOutput, width, height, quality);
     }
     
-    // Core conversion logic shared by both image functions
+    // Core FFmpeg conversion with proper error handling and cleanup
     function runFFmpegConversion(ffmpegPath, inputPath, outputPath, width, height, quality) {
         return new Promise((resolve, reject) => {
             const args = [
@@ -347,67 +411,92 @@ exports.init = async api => {
 
             const proc = spawn(ffmpegPath, args);
             const stderrChunks = [];
+            let timedOut = false;
+
+            // Timeout protection
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                proc.kill();
+            }, FFMPEG_TIMEOUT);
 
             proc.stderr.on('data', chunk => stderrChunks.push(chunk));
             
             proc.on('error', err => {
-                fs.unlink(outputPath).catch(() => {});
+                clearTimeout(timeout);
+                cleanupTempFile(outputPath);
                 reject(err);
             });
 
-            proc.on('exit', async (code) => {
+            proc.on('exit', async (code, signal) => {
+                clearTimeout(timeout);
+                
+                if (timedOut) {
+                    await cleanupTempFile(outputPath);
+                    return reject(new Error(`FFmpeg conversion timed out (>${FFMPEG_TIMEOUT}ms)`));
+                }
+
                 if (code !== 0) {
                     const stderr = Buffer.concat(stderrChunks).toString();
-                    fs.unlink(outputPath).catch(() => {});
+                    await cleanupTempFile(outputPath);
                     return reject(new Error(`FFmpeg WebP conversion failed (${code}): ${stderr}`));
                 }
 
                 try {
                     const webpBuffer = await fs.readFile(outputPath);
-                    await fs.unlink(outputPath).catch(() => {});
+                    await cleanupTempFile(outputPath);
                     
-                    if (webpBuffer.length === 0) return reject(new Error("FFmpeg produced empty WebP"));
+                    if (webpBuffer.length === 0) {
+                        return reject(new Error("FFmpeg produced empty WebP"));
+                    }
                     resolve(webpBuffer);
                 } catch (err) {
+                    await cleanupTempFile(outputPath);
                     reject(new Error(`Failed to read WebP output: ${err.message}`));
                 }
             });
         });
     }
 
-    // Video Thumbnails Function.
+    // Generate animated video thumbnail with intelligent frame selection
     async function generateAnimatedVideoThumbnail(filePath, width, quality) {
         const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
         const ffprobePath = getFFprobePath(ffmpegPath);
 
         const duration = await getVideoDuration(filePath, ffprobePath);
+        if (duration <= 0) {
+            throw new Error("Could not determine video duration");
+        }
 
+        // Intelligent segment selection based on video length
         let segments = [];
         if (duration < 6) {
-            // Videos less than 6 seconds - Make a full thumbnail.
-            segments = [{ start: 0, duration: duration }];
+            // Videos less than 6 seconds - Show full length
+            segments = [{ start: 0, duration: Math.min(duration, 5) }];
         }
         else if (duration < 30) {
-            // Videos less than 30 seconds - First 5 seconds only.
+            // Videos less than 30 seconds - First 5 seconds
             segments = [{ start: 0, duration: 5 }];
         }
         else {
-            // Every other video - First 4 seconds + 4 More with some Segments.
+            // Longer videos - Capture key moments
             segments = [
-                { start: 0, duration: 4 },
-                { start: duration * 0.20, duration: 2 },
-                { start: duration * 0.40, duration: 2 }
+                { start: 0, duration: 4 },              // Opening
+                { start: Math.max(0, duration * 0.20), duration: 2 }, // 20% mark
+                { start: Math.max(0, duration * 0.40), duration: 2 }  // 40% mark
             ];
         }
 
-        const tmpFile = getTempPath('ffmpeg-tmp', '.webp');
+        const tmpFile = getTempPath('ffmpeg-animated', '.webp');
 
         return new Promise((resolve, reject) => {
             const args = [];
+            
+            // Build input arguments for each segment
             segments.forEach(seg => {
                 args.push('-ss', seg.start.toFixed(2), '-t', seg.duration.toFixed(2), '-i', filePath);
             });
 
+            // Build filter string
             let filterString = '';
             let concatInputs = '';
             segments.forEach((seg, index) => {
@@ -420,39 +509,60 @@ exports.init = async api => {
                 '-filter_complex', filterString,
                 '-map', '[outv]',
                 '-c:v', 'libwebp',
-                '-loop', '0',               
+                '-loop', '0',
                 '-q:v', quality.toString(), 
-                '-an',                      
+                '-an',
                 '-y',
                 tmpFile
             );
 
             const proc = spawn(ffmpegPath, args);
             const stderrChunks = [];
+            let timedOut = false;
+
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                proc.kill();
+            }, FFMPEG_TIMEOUT);
 
             proc.stderr.on('data', chunk => stderrChunks.push(chunk));
             
-            proc.on('error', err => reject(err));
+            proc.on('error', err => {
+                clearTimeout(timeout);
+                cleanupTempFile(tmpFile);
+                reject(err);
+            });
+
             proc.on('exit', async (code) => {
+                clearTimeout(timeout);
+
+                if (timedOut) {
+                    await cleanupTempFile(tmpFile);
+                    return reject(new Error(`Video animation timed out (>${FFMPEG_TIMEOUT}ms)`));
+                }
+
                 if (code !== 0) {
                     const stderr = Buffer.concat(stderrChunks).toString();
-                    fs.unlink(tmpFile).catch(() => {});
-                    return reject(new Error(`FFmpeg animated export failed (Code ${code}). Stderr: ${stderr}`));
+                    await cleanupTempFile(tmpFile);
+                    return reject(new Error(`FFmpeg animated export failed (${code}): ${stderr}`));
                 }
                 
                 try {
                     const fullBuffer = await fs.readFile(tmpFile);
-                    await fs.unlink(tmpFile).catch(() => {});
-                    if (fullBuffer.length === 0) return reject(new Error("FFmpeg produced an empty WebP output"));
+                    await cleanupTempFile(tmpFile);
+                    if (fullBuffer.length === 0) {
+                        return reject(new Error("FFmpeg produced empty animated WebP"));
+                    }
                     resolve(fullBuffer);
                 } catch (err) {
+                    await cleanupTempFile(tmpFile);
                     reject(new Error(`Failed to read temporary WebP file: ${err.message}`));
                 }
             });
         });
     }
 
-    // GIF Thumbnail Function.
+    // Convert GIF/WebP animation to optimized WebP format
     async function generateAnimatedGifThumbnail(filePath, width, quality) {
         const ffmpegPath = api.getConfig('ffmpeg_path') || 'ffmpeg';
         const tmpFile = getTempPath('ffmpeg-gif', '.webp');
@@ -460,7 +570,7 @@ exports.init = async api => {
         return new Promise((resolve, reject) => {
             const args = [
                 '-i', filePath,
-                '-vf', `fps=10,scale='min(${width}\\,iw)':-2`,
+                '-vf', `fps=10,scale='min(${width},iw)':-2`,
                 '-c:v', 'libwebp',
                 '-loop', '0',
                 '-q:v', quality.toString(),
@@ -470,80 +580,165 @@ exports.init = async api => {
 
             const proc = spawn(ffmpegPath, args);
             const stderrChunks = [];
+            let timedOut = false;
+
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                proc.kill();
+            }, FFMPEG_TIMEOUT);
 
             proc.stderr.on('data', chunk => stderrChunks.push(chunk));
-            proc.on('error', err => reject(err));
+            
+            proc.on('error', err => {
+                clearTimeout(timeout);
+                cleanupTempFile(tmpFile);
+                reject(err);
+            });
+
             proc.on('exit', async (code) => {
+                clearTimeout(timeout);
+
+                if (timedOut) {
+                    await cleanupTempFile(tmpFile);
+                    return reject(new Error(`GIF conversion timed out (>${FFMPEG_TIMEOUT}ms)`));
+                }
+
                 if (code !== 0) {
                     const stderr = Buffer.concat(stderrChunks).toString();
-                    fs.unlink(tmpFile).catch(() => {});
+                    await cleanupTempFile(tmpFile);
                     return reject(new Error(`FFmpeg GIF conversion failed (${code}): ${stderr}`));
                 }
 
                 try {
                     const fullBuffer = await fs.readFile(tmpFile);
-                    await fs.unlink(tmpFile).catch(() => {});
-                    if (fullBuffer.length === 0) return reject(new Error("FFmpeg produced empty WebP"));
+                    await cleanupTempFile(tmpFile);
+                    if (fullBuffer.length === 0) {
+                        return reject(new Error("FFmpeg produced empty WebP from GIF"));
+                    }
                     resolve(fullBuffer);
                 } catch (err) {
+                    await cleanupTempFile(tmpFile);
                     reject(new Error(`Failed to read WebP: ${err.message}`));
                 }
             });
         });
     }
 
-    // Document Thumbnail Extraction.
-    async function extractDocumentThumbnail(filePath, sofficePath) {
+    // Extract first page of document as image using LibreOffice
+    async function extractDocumentThumbnail(filePath, sofficePath, cacheHash) {
         const tmpDir = os.tmpdir();
-        // LibreOffice will create an output image file into temp, based on the server request.
+        
+        // Create UNIQUE temp directory using the cache hash (same hash that will identify the final cached file)
+        const uniqueTmpDir = path.join(tmpDir, `hfs-doc-${cacheHash}`);
+        
+        try {
+            await fs.mkdir(uniqueTmpDir, { recursive: true });
+        } catch (e) {
+            return Promise.reject(new Error(`Failed to create temp directory: ${e.message}`));
+        }
+
+        // LibreOffice will create the PNG with the original document name
         const fileName = path.basename(filePath, path.extname(filePath));
-        const expectedOutput = path.join(tmpDir, `${fileName}.png`);
+        const expectedOutput = path.join(uniqueTmpDir, `${fileName}.png`);
 
         return new Promise((resolve, reject) => {
             const args = [
                 '--headless',
                 '--convert-to', 'png',
-                '--outdir', tmpDir,
+                '--outdir', uniqueTmpDir,  // ← Use unique subdirectory based on cache hash
                 filePath
             ];
 
             const proc = spawn(sofficePath, args);
+            let timedOut = false;
+
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                proc.kill();
+            }, SOFFICE_TIMEOUT);
             
+            proc.on('error', err => {
+                clearTimeout(timeout);
+                fs.rm(uniqueTmpDir, { recursive: true, force: true }).catch(() => {});
+                reject(err);
+            });
+
             proc.on('exit', async (code) => {
-                if (code !== 0) return reject(new Error(`LibreOffice failed with code ${code}`));
+                clearTimeout(timeout);
+
+                if (timedOut) {
+                    await fs.rm(uniqueTmpDir, { recursive: true, force: true }).catch(() => {});
+                    return reject(new Error(`LibreOffice conversion timed out (>${SOFFICE_TIMEOUT}ms)`));
+                }
+
+                if (code !== 0) {
+                    await fs.rm(uniqueTmpDir, { recursive: true, force: true }).catch(() => {});
+                    return reject(new Error(`LibreOffice failed with code ${code}`));
+                }
 
                 try {
                     const buffer = await fs.readFile(expectedOutput);
-                    await fs.unlink(expectedOutput).catch(() => {}); 
+                    
+                    // Cleanup the unique temp directory after reading
+                    await fs.rm(uniqueTmpDir, { recursive: true, force: true }).catch(() => {});
+                    
                     resolve(buffer);
                 } catch (err) {
-                    reject(new Error("Could not find generated document thumbnail."));
+                    await fs.rm(uniqueTmpDir, { recursive: true, force: true }).catch(() => {});
+                    reject(new Error(`Could not read document thumbnail: ${err.message}`));
                 }
             });
         });
     }
 
-    // Video Duration
+    // Get video duration using ffprobe with proper error handling
     function getVideoDuration(filePath, ffprobePath) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const args = [
                 '-v', 'error',
                 '-show_entries', 'format=duration',
                 '-of', 'default=noprint_wrappers=1:nokey=1',
                 filePath
             ];
+            
             const proc = spawn(ffprobePath, args);
             let output = '';
+            let timedOut = false;
+
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                proc.kill();
+            }, FFPROBE_TIMEOUT);
+
             proc.stdout.on('data', chunk => output += chunk.toString());
-            proc.on('error', () => resolve(0));
-            proc.on('exit', () => {
+            
+            proc.on('error', err => {
+                clearTimeout(timeout);
+                // Don't resolve silently - let caller handle
+                reject(new Error(`FFprobe error: ${err.message}`));
+            });
+
+            proc.on('exit', (code) => {
+                clearTimeout(timeout);
+
+                if (timedOut) {
+                    return reject(new Error(`FFprobe timed out (>${FFPROBE_TIMEOUT}ms)`));
+                }
+
+                if (code !== 0) {
+                    return reject(new Error(`FFprobe failed with code ${code}`));
+                }
+
                 const duration = parseFloat(output.trim());
-                resolve(isNaN(duration) ? 0 : duration);
+                if (isNaN(duration) || duration <= 0) {
+                    return reject(new Error("FFprobe returned invalid duration"));
+                }
+                resolve(duration);
             });
         });
     }
 
-    // FFProbe PATH = FFMpeg PATH
+    // Derive ffprobe path from ffmpeg path. Assumes they're in the same directory with same extension
     function getFFprobePath(ffmpegPath) {
         const dir = path.dirname(ffmpegPath);
         const ext = path.extname(ffmpegPath);
@@ -555,7 +750,7 @@ exports.init = async api => {
         return 'ffprobe';
     }
 
-    // Parse multimedia file for covers.
+    // Query ffprobe for attached picture stream (cover art)
     function getAttachedPictureStreamIndex(filePath, ffprobePath) {
         return new Promise((resolve, reject) => {
             const args = [
@@ -568,32 +763,51 @@ exports.init = async api => {
 
             const proc = spawn(ffprobePath, args);
             const chunks = [];
+            let timedOut = false;
+
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                proc.kill();
+            }, FFPROBE_TIMEOUT);
             
             proc.stdout.on('data', chunk => chunks.push(chunk));
-            proc.on('error', err => reject(err));
+            
+            proc.on('error', err => {
+                clearTimeout(timeout);
+                reject(err);
+            });
+
             proc.on('exit', (code) => {
-                if (code !== 0) return reject(new Error(`ffprobe exited with code ${code}`));
+                clearTimeout(timeout);
+
+                if (timedOut) {
+                    return reject(new Error(`FFprobe timed out (>${FFPROBE_TIMEOUT}ms)`));
+                }
+
+                if (code !== 0) {
+                    return reject(new Error(`ffprobe exited with code ${code}`));
+                }
                 
                 try {
                     const output = Buffer.concat(chunks).toString();
                     const json = JSON.parse(output);
                     
-                    if (json.streams) {
+                    if (json.streams && Array.isArray(json.streams)) {
                         for (const stream of json.streams) {
                             if (stream.disposition && stream.disposition.attached_pic === 1) {
                                 return resolve(stream.index);
                             }
                         }
                     }
-                    resolve(null);
+                    resolve(null); // No cover art found
                 } catch (e) {
-                    reject(e);
+                    reject(new Error(`Failed to parse ffprobe output: ${e.message}`));
                 }
             });
         });
     }
 
-    // Extract Integrated Cover
+    // Extract embedded cover art image from media file
     function extractEmbeddedThumbnail(filePath, streamIndex, ffmpegPath) {
         return new Promise((resolve, reject) => {
             const args = [
@@ -607,17 +821,37 @@ exports.init = async api => {
             const proc = spawn(ffmpegPath, args);
             const chunks = [];
             const stderrChunks = [];
+            let timedOut = false;
+
+            const timeout = setTimeout(() => {
+                timedOut = true;
+                proc.kill();
+            }, FFMPEG_TIMEOUT);
 
             proc.stdout.on('data', chunk => chunks.push(chunk));
             proc.stderr.on('data', chunk => stderrChunks.push(chunk));
-            proc.on('error', err => reject(err));
+            
+            proc.on('error', err => {
+                clearTimeout(timeout);
+                reject(err);
+            });
+
             proc.on('exit', (code) => {
+                clearTimeout(timeout);
+
+                if (timedOut) {
+                    return reject(new Error(`Cover extraction timed out (>${FFMPEG_TIMEOUT}ms)`));
+                }
+
                 if (code !== 0) {
                     const stderr = Buffer.concat(stderrChunks).toString();
-                    return reject(new Error(`FFmpeg extract failed with code ${code}. Stderr: ${stderr}`));
+                    return reject(new Error(`FFmpeg extract failed with code ${code}: ${stderr}`));
                 }
+
                 const fullBuffer = Buffer.concat(chunks);
-                if (fullBuffer.length === 0) return reject(new Error("FFmpeg extracted empty buffer"));
+                if (fullBuffer.length === 0) {
+                    return reject(new Error("FFmpeg extracted empty buffer"));
+                }
                 resolve(fullBuffer);
             });
         });
