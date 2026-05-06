@@ -40,8 +40,8 @@ Get the most out of the plugin in 30 seconds:
 1.  **Install FFmpeg**: Ensure [FFmpeg](https://ffmpeg.org/download.html) is on your system! You can extract it where "HFS" is. It **needs "ffprobe"** so unzip the full package!
 2.  **Install LibreOffice** (optional): Ensure [LibreOffice](https://libreoffice.org/download.html) is installed on your system too! It's used for the document thumbnail generation.
 3.  **Link Paths**: In **Admin Panel > Plugins > better-thumbnails-mod**::
-      - Set the **FFmpeg Executable Path** to the location of your `ffmpeg.exe` + `ffprobe.exe` (e.g. `C:\ffmpeg\bin\ffmpeg.exe`).
-      - (Optional) Set the **LibreOffice Executable Path** to the the location of your `soffice.exe` (e.g. C:/Program Files/LibreOffice/program/soffice.exe).
+      - Set the **FFmpeg Executable Path** to the location of your `ffmpeg.exe` + `ffprobe.exe` (e.g. `C:\ffmpeg\bin\ffmpeg.exe` or `/usr/bin/ffmpeg`).
+      - (Optional) Set the **LibreOffice Executable Path** to the the location of your `soffice.exe` (e.g. `C:/Program Files/LibreOffice/program/soffice.exe` or `/usr/bin/soffice`).
 4. **Optimize Performance**: If you have a powerful server, increase **Max Concurrent Generations** to `6-8` for faster bulk generation. On weaker VPS/Pi, keep it at `2-3`.
 5. **Animated Generation can be CPU intensive!** Care of this!
 
