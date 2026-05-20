@@ -6,7 +6,7 @@
  * - "VenB304" for its first original version.
  */
 
-exports.version = 11;
+exports.version = 12;
 exports.description = "High-performance thumbnails generation using FFmpeg. Generates images on server preventing frontend lag.";
 exports.apiRequired = 12.0;
 exports.repo = "RicardoEstep/hfs-better-thumbnails-mod";
@@ -88,10 +88,10 @@ exports.init = async api => {
     const MEDIA_WITH_COVERS = [...VIDEO_EXTS, ...AUDIO_EXTS];
     const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
     const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'avif', 'svg'];
-    const MAX_QUEUE_SIZE = 50;    // FIFO Max Queue, for Security
-    const FFPROBE_TIMEOUT = 5000; // ms
-    const FFMPEG_TIMEOUT = 30000; // ms
-    const SOFFICE_TIMEOUT = 15000; // ms
+    const MAX_QUEUE_SIZE = 60;    // FIFO Max Queue, for Security
+    const FFPROBE_TIMEOUT = 10000; // ms
+    const FFMPEG_TIMEOUT = 60000; // ms
+    const SOFFICE_TIMEOUT = 30000; // ms
 
     // Setup Cache Directory
     const cacheDir = path.join(api.storageDir, 'thumbnails');
