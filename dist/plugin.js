@@ -89,9 +89,9 @@ exports.init = async api => {
     const DOC_EXTS = ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'];
     const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'tiff', 'tif', 'gif', 'avif', 'svg'];
     const MAX_QUEUE_SIZE = 60;    // FIFO Max Queue, for Security
-    const FFPROBE_TIMEOUT = 10000; // ms
+    const FFPROBE_TIMEOUT = 15000; // ms
     const FFMPEG_TIMEOUT = 60000; // ms
-    const SOFFICE_TIMEOUT = 30000; // ms
+    const SOFFICE_TIMEOUT = 40000; // ms
 
     // Setup Cache Directory
     const cacheDir = path.join(api.storageDir, 'thumbnails');
